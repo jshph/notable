@@ -203,6 +203,14 @@ dependencies {
     // for PDF support:
     implementation("com.artifex.mupdf:fitz:1.26.10")
 
+    // Jetpack Ink API — stroke rendering + geometry
+    def ink_version = "1.0.0"
+    implementation "androidx.ink:ink-nativeloader:$ink_version"
+    implementation "androidx.ink:ink-brush:$ink_version"
+    implementation "androidx.ink:ink-geometry:$ink_version"
+    implementation "androidx.ink:ink-rendering:$ink_version"
+    implementation "androidx.ink:ink-strokes:$ink_version"
+
     // Hilt
     implementation "com.google.dagger:hilt-android:2.59.2"
     ksp "com.google.dagger:hilt-compiler:2.59.2"
