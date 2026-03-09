@@ -202,6 +202,9 @@ dependencies {
     // for PDF support:
     implementation("com.artifex.mupdf:fitz:1.26.10")
 
+    // ML Kit Digital Ink Recognition
+    implementation 'com.google.mlkit:digital-ink-recognition:19.0.0'
+
     // Hilt
     implementation "com.google.dagger:hilt-android:2.59.2"
     ksp "com.google.dagger:hilt-compiler:2.59.2"

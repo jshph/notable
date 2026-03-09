@@ -22,6 +22,8 @@ import com.ethran.notable.ui.views.Library
 import com.ethran.notable.ui.views.LibraryDestination
 import com.ethran.notable.ui.views.PagesDestination
 import com.ethran.notable.ui.views.PagesView
+import com.ethran.notable.ui.views.InkTestDestination
+import com.ethran.notable.ui.views.InkTestView
 import com.ethran.notable.ui.views.SettingsDestination
 import com.ethran.notable.ui.views.SettingsView
 import com.ethran.notable.ui.views.SystemInformationDestination
@@ -133,7 +135,8 @@ fun NotableNavHost(
                 SettingsView(
                     onBack = { appNavigator.goBack() },
                     goToWelcome = { appNavigator.goToWelcome() },
-                    goToSystemInfo = { appNavigator.goToSystemInfo() }
+                    goToSystemInfo = { appNavigator.goToSystemInfo() },
+                    goToInkTest = { appNavigator.goToInkTest() }
                 )
                 appNavigator.cleanCurrentPageId()
             }
@@ -141,6 +144,12 @@ fun NotableNavHost(
                 route = BugReportDestination.route,
             ) {
                 BugReportScreen(goBack = { appNavigator.goBack() })
+                appNavigator.cleanCurrentPageId()
+            }
+            composable(
+                route = InkTestDestination.route,
+            ) {
+                InkTestView(onBack = { appNavigator.goBack() })
                 appNavigator.cleanCurrentPageId()
             }
         }

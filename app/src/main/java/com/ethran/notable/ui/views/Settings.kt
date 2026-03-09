@@ -77,6 +77,7 @@ fun SettingsView(
     onBack: () -> Unit,
     goToWelcome: () -> Unit,
     goToSystemInfo: () -> Unit,
+    goToInkTest: () -> Unit = {},
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
     val context = LocalContext.current
@@ -97,6 +98,7 @@ fun SettingsView(
         onBack = onBack,
         goToWelcome = goToWelcome,
         goToSystemInfo = goToSystemInfo,
+        goToInkTest = goToInkTest,
         onCheckUpdate = { force ->
             viewModel.checkUpdate(context, force)
         },
@@ -114,6 +116,7 @@ fun SettingsContent(
     onBack: () -> Unit,
     goToWelcome: () -> Unit,
     goToSystemInfo: () -> Unit,
+    goToInkTest: () -> Unit = {},
     onCheckUpdate: (Boolean) -> Unit,
     onUpdateSettings: (AppSettings) -> Unit,
     selectedTabInitial: Int = 0,
@@ -153,7 +156,7 @@ fun SettingsContent(
                         settings, onUpdateSettings, listOfGestures, availableGestures
                     )
 
-                    2 -> DebugSettings(settings, onUpdateSettings, goToWelcome, goToSystemInfo)
+                    2 -> DebugSettings(settings, onUpdateSettings, goToWelcome, goToSystemInfo, goToInkTest)
                 }
             }
 

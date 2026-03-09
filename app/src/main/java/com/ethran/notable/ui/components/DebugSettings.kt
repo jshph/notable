@@ -9,7 +9,8 @@ fun DebugSettings(
     settings: AppSettings,
     onSettingsChange: (AppSettings) -> Unit,
     goToWelcome: () -> Unit,
-    goToSystemInfo: () -> Unit
+    goToSystemInfo: () -> Unit,
+    goToInkTest: () -> Unit = {}
 ) {
     Column {
         SettingToggleRow(
@@ -59,6 +60,13 @@ fun DebugSettings(
             value = settings.destructiveMigrations,
             onToggle = { isChecked ->
                 onSettingsChange(settings.copy(destructiveMigrations = isChecked))
+            }
+        )
+        SettingToggleRow(
+            label = "Ink Recognition Test",
+            value = false,
+            onToggle = {
+                goToInkTest()
             }
         )
     }
