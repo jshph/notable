@@ -40,6 +40,7 @@ import com.ethran.notable.editor.ui.toolbar.Toolbar
 import com.ethran.notable.gestures.EditorGestureReceiver
 import com.ethran.notable.io.ExportEngine
 import com.ethran.notable.io.InboxSyncEngine
+import com.ethran.notable.io.SyncState
 import com.ethran.notable.io.VaultTagScanner
 import com.ethran.notable.io.exportToLinkedFile
 import com.ethran.notable.navigation.NavigationDestination
@@ -158,7 +159,6 @@ fun EditorView(
 
         // Inbox mode detection — query DB since pageFromDb loads async
         var isInboxPage by remember { mutableStateOf(false) }
-        var isSyncing by remember { mutableStateOf(false) }
         val selectedTags = remember { mutableStateListOf<String>() }
         // Read tags reactively — updates when VaultTagScanner.refreshCache() runs
         val suggestedTags = VaultTagScanner.cachedTags
@@ -243,28 +243,10 @@ fun EditorView(
                     },
                     onTagRemove = { tag -> selectedTags.remove(tag) },
                     onSave = {
-                        if (!isSyncing) {
-                            isSyncing = true
-                            scope.launch(Dispatchers.IO) {
-                                try {
-                                    InboxSyncEngine.syncInboxPage(
-                                        appRepository, pageId, selectedTags.toList()
-                                    )
-                                    withContext(Dispatchers.Main) {
-                                        navController.popBackStack()
-                                    }
-                                } catch (e: Exception) {
-                                    isSyncing = false
-                                    log.e("Inbox sync failed: ${e.message}", e)
-                                    SnackState.globalSnackFlow.tryEmit(
-                                        SnackConf(
-                                            text = "Inbox sync failed: ${e.message}",
-                                            duration = 4000
-                                        )
-                                    )
-                                }
-                            }
-                        }
+                        SyncState.launchSync(
+                            appRepository, pageId, selectedTags.toList()
+                        )
+                        navController.popBackStack()
                     },
                     onDiscard = { navController.popBackStack() }
                 )
@@ -284,21 +266,6 @@ fun EditorView(
             }
             HorizontalScrollIndicator(state = editorState)
 
-            // Full-screen overlay while inbox sync is in progress
-            if (isSyncing) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(Color.White),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = "Saving to vault...",
-                        fontSize = 24.sp,
-                        color = Color.Black
-                    )
-                }
-            }
         }
     }
 }

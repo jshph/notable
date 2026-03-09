@@ -55,6 +55,7 @@ import com.ethran.notable.editor.EditorDestination
 import com.ethran.notable.editor.ui.toolbar.Topbar
 import com.ethran.notable.editor.utils.autoEInkAnimationOnScroll
 import com.ethran.notable.io.ExportEngine
+import com.ethran.notable.io.SyncState
 import com.ethran.notable.navigation.NavigationDestination
 import com.ethran.notable.ui.SnackConf
 import com.ethran.notable.ui.SnackState
@@ -212,6 +213,7 @@ fun LibraryContent(
             // Existing pages
             items(pages) { page ->
                 var isPageSelected by remember { mutableStateOf(false) }
+                val isSyncing = page.id in SyncState.syncingPageIds
                 Box {
                     PagePreview(
                         modifier = Modifier
@@ -223,6 +225,20 @@ fun LibraryContent(
                             .border(1.dp, Color.Gray, RectangleShape),
                         pageId = page.id
                     )
+                    if (isSyncing) {
+                        Box(
+                            modifier = Modifier
+                                .aspectRatio(3f / 4f)
+                                .background(Color.White.copy(alpha = 0.7f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                "Syncing...",
+                                style = androidx.compose.material.MaterialTheme.typography.caption,
+                                color = Color.DarkGray
+                            )
+                        }
+                    }
                     if (isPageSelected) com.ethran.notable.editor.ui.PageMenu(
                         appRepository = appRepository,
                         pageId = page.id,

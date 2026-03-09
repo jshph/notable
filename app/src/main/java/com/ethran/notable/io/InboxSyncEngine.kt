@@ -57,8 +57,7 @@ object InboxSyncEngine {
         val strokes = pageWithStrokes.strokes
 
         if (strokes.isEmpty() && tags.isEmpty()) {
-            log.i("No strokes and no tags on inbox page, deleting")
-            appRepository.pageRepository.delete(pageId)
+            log.i("No strokes and no tags on inbox page, skipping sync")
             return
         }
 
@@ -77,8 +76,7 @@ object InboxSyncEngine {
         val inboxPath = GlobalAppSettings.current.obsidianInboxPath
         writeMarkdownFile(markdown, page.createdAt, inboxPath)
 
-        appRepository.pageRepository.delete(pageId)
-        log.i("Inbox sync complete, page $pageId deleted")
+        log.i("Inbox sync complete for page $pageId")
     }
 
     private suspend fun ensureModelDownloaded() {
