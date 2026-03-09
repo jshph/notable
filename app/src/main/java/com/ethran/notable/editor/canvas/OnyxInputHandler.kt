@@ -181,8 +181,11 @@ class OnyxInputHandler(
         log.i("Update editable surface")
         coroutineScope.launch {
             onSurfaceInit(drawCanvas)
-            val toolbarHeight =
-                if (state.isToolbarOpen) convertDpToPixel(40.dp, drawCanvas.context).toInt() else 0
+            val toolbarHeight = when {
+                state.isInboxPage -> convertDpToPixel(210.dp, drawCanvas.context).toInt()
+                state.isToolbarOpen -> convertDpToPixel(40.dp, drawCanvas.context).toInt()
+                else -> 0
+            }
             setupSurface(
                 drawCanvas,
                 touchHelper,

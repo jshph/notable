@@ -4,8 +4,6 @@ import android.os.Environment
 import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.data.db.Stroke
-import com.ethran.notable.editor.drawing.INBOX_CONTENT_START_Y
-import com.ethran.notable.editor.drawing.INBOX_DIVIDER_Y
 import com.google.mlkit.common.model.DownloadConditions
 import com.google.mlkit.common.model.RemoteModelManager
 import com.google.mlkit.vision.digitalink.recognition.DigitalInkRecognition
@@ -36,8 +34,16 @@ object InboxSyncEngine {
         )
     }
 
-    suspend fun syncInboxPage(appRepository: AppRepository, pageId: String) {
-        log.i("Starting inbox sync for page $pageId")
+    /**
+     * Sync an inbox page to Obsidian. Tags come from the UI (pill selection),
+     * content is recognized from all strokes on the page.
+     */
+    suspend fun syncInboxPage(
+        appRepository: AppRepository,
+        pageId: String,
+        tags: List<String>
+    ) {
+        log.i("Starting inbox sync for page $pageId with tags: $tags")
 
         val page = appRepository.pageRepository.getById(pageId)
         if (page == null) {
@@ -48,26 +54,20 @@ object InboxSyncEngine {
         val pageWithStrokes = appRepository.pageRepository.getWithStrokeById(pageId)
         val strokes = pageWithStrokes.strokes
 
-        if (strokes.isEmpty()) {
-            log.i("No strokes on inbox page, deleting")
+        if (strokes.isEmpty() && tags.isEmpty()) {
+            log.i("No strokes and no tags on inbox page, deleting")
             appRepository.pageRepository.delete(pageId)
             return
         }
 
-        ensureModelDownloaded()
+        val contentText = if (strokes.isNotEmpty()) {
+            ensureModelDownloaded()
+            log.i("Recognizing ${strokes.size} content strokes")
+            recognizeStrokes(strokes)
+        } else ""
 
-        // Classify strokes by zone using bounding box position
-        val tagStrokes = strokes.filter { it.top < INBOX_DIVIDER_Y }
-        val contentStrokes = strokes.filter { it.top >= INBOX_CONTENT_START_Y }
+        log.i("Recognized content: '${contentText.take(100)}'")
 
-        log.i("Classified ${tagStrokes.size} tag strokes, ${contentStrokes.size} content strokes")
-
-        val tagText = if (tagStrokes.isNotEmpty()) recognizeStrokes(tagStrokes) else ""
-        val contentText = if (contentStrokes.isNotEmpty()) recognizeStrokes(contentStrokes) else ""
-
-        log.i("Recognized tags: '$tagText', content: '${contentText.take(100)}'")
-
-        val tags = parseTags(tagText)
         val createdDate = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(page.createdAt)
         val markdown = generateMarkdown(createdDate, tags, contentText)
 
@@ -137,15 +137,6 @@ object InboxSyncEngine {
         }
     }
 
-    private fun parseTags(rawText: String): List<String> {
-        return rawText
-            .replace("#", "")
-            .replace(",", " ")
-            .split("\\s+".toRegex())
-            .map { it.trim().lowercase() }
-            .filter { it.isNotEmpty() }
-    }
-
     private fun generateMarkdown(
         createdDate: String,
         tags: List<String>,
@@ -153,7 +144,7 @@ object InboxSyncEngine {
     ): String {
         val sb = StringBuilder()
         sb.appendLine("---")
-        sb.appendLine("created: $createdDate")
+        sb.appendLine("created: \"[[$createdDate]]\"")
         if (tags.isNotEmpty()) {
             sb.appendLine("tags:")
             tags.forEach { sb.appendLine("  - $it") }

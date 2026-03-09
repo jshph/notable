@@ -1,10 +1,37 @@
 package com.ethran.notable.ui.components
 
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.MaterialTheme
+import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.ethran.notable.R
 import com.ethran.notable.data.datastore.AppSettings
+import com.ethran.notable.io.VaultTagScanner
 
 
 @Composable
@@ -12,6 +39,11 @@ fun GeneralSettings(
     settings: AppSettings, onSettingsChange: (AppSettings) -> Unit
 ) {
     Column {
+        // Inbox Capture section
+        InboxCaptureSettings(settings, onSettingsChange)
+
+        Spacer(modifier = Modifier.height(8.dp))
+
         SelectorRow(
             label = stringResource(R.string.default_page_background_template), options = listOf(
                 "blank" to stringResource(R.string.blank_page),
@@ -86,4 +118,78 @@ fun GeneralSettings(
                 onSettingsChange(settings.copy(visualizePdfPagination = isChecked))
             })
     }
+}
+
+@Composable
+private fun InboxCaptureSettings(
+    settings: AppSettings,
+    onSettingsChange: (AppSettings) -> Unit
+) {
+    val focusManager = LocalFocusManager.current
+    var pathInput by remember { mutableStateOf(settings.obsidianInboxPath) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(1.dp, Color.LightGray, RoundedCornerShape(8.dp))
+            .padding(16.dp)
+    ) {
+        Text(
+            "Inbox Capture",
+            style = MaterialTheme.typography.h6,
+            fontWeight = FontWeight.Bold
+        )
+
+        Spacer(modifier = Modifier.height(4.dp))
+
+        Text(
+            "Handwritten notes are recognized and saved as markdown to this folder. " +
+                    "Tags are also loaded from existing notes in this folder.",
+            style = MaterialTheme.typography.body2,
+            color = Color.Gray
+        )
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        Text(
+            "Inbox folder path",
+            style = MaterialTheme.typography.body1,
+            fontWeight = FontWeight.Medium
+        )
+
+        Spacer(modifier = Modifier.height(4.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            BasicTextField(
+                value = pathInput,
+                onValueChange = { pathInput = it },
+                textStyle = TextStyle(fontSize = 16.sp, color = Color.Black),
+                singleLine = true,
+                cursorBrush = SolidColor(Color.Black),
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(onDone = {
+                    onSettingsChange(settings.copy(obsidianInboxPath = pathInput))
+                    VaultTagScanner.refreshCache(pathInput)
+                    focusManager.clearFocus()
+                }),
+                modifier = Modifier
+                    .weight(1f)
+                    .border(1.dp, Color.Gray, RoundedCornerShape(6.dp))
+                    .padding(horizontal = 12.dp, vertical = 10.dp)
+            )
+        }
+
+        Spacer(modifier = Modifier.height(4.dp))
+
+        Text(
+            "Relative to /storage/emulated/0/. Press Done to save.",
+            style = MaterialTheme.typography.caption,
+            color = Color.Gray
+        )
+    }
+
+    SettingsDivider()
 }

@@ -34,6 +34,7 @@ import com.ethran.notable.data.db.KvProxy
 import com.ethran.notable.data.db.StrokeMigrationHelper
 import com.ethran.notable.editor.canvas.CanvasEventBus
 import com.ethran.notable.io.ExportEngine
+import com.ethran.notable.io.VaultTagScanner
 import com.ethran.notable.ui.LocalSnackContext
 import com.ethran.notable.ui.SnackState
 import com.ethran.notable.ui.components.NotableApp
@@ -109,6 +110,9 @@ class MainActivity : ComponentActivity() {
 
                         editorSettingCacheManager.get().init()
                         strokeMigrationHelper.get().reencodeStrokePointsToSB1()
+
+                        // Pre-populate inbox tag cache
+                        VaultTagScanner.refreshCache(savedSettings.obsidianInboxPath)
                     }
                 }
                 isInitialized = true

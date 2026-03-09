@@ -10,6 +10,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -25,12 +26,14 @@ import com.ethran.notable.editor.state.EditorState
 import com.ethran.notable.editor.state.History
 import com.ethran.notable.editor.ui.EditorSurface
 import com.ethran.notable.editor.ui.HorizontalScrollIndicator
+import com.ethran.notable.editor.ui.InboxToolbar
 import com.ethran.notable.editor.ui.ScrollIndicator
 import com.ethran.notable.editor.ui.SelectedBitmap
 import com.ethran.notable.editor.ui.toolbar.Toolbar
 import com.ethran.notable.gestures.EditorGestureReceiver
 import com.ethran.notable.io.ExportEngine
 import com.ethran.notable.io.InboxSyncEngine
+import com.ethran.notable.io.VaultTagScanner
 import com.ethran.notable.io.exportToLinkedFile
 import com.ethran.notable.navigation.NavigationDestination
 import com.ethran.notable.ui.LocalSnackContext
@@ -146,6 +149,25 @@ fun EditorView(
         }
 
 
+        // Inbox mode detection — query DB since pageFromDb loads async
+        var isInboxPage by remember { mutableStateOf(false) }
+        var isSyncing by remember { mutableStateOf(false) }
+        val selectedTags = remember { mutableStateListOf<String>() }
+        val suggestedTags = remember { mutableStateListOf<String>() }
+
+        LaunchedEffect(pageId) {
+            val pageData = withContext(Dispatchers.IO) {
+                appRepository.pageRepository.getById(pageId)
+            }
+            val inbox = pageData?.background == "inbox"
+            isInboxPage = inbox
+            editorState.isInboxPage = inbox
+            if (inbox) {
+                // Use pre-cached tags (scanned on app start)
+                suggestedTags.addAll(VaultTagScanner.cachedTags)
+            }
+        }
+
         DisposableEffect(Unit) {
             onDispose {
                 // finish selection operation
@@ -153,23 +175,6 @@ fun EditorView(
                 if (bookId != null)
                     exportToLinkedFile(exportEngine, bookId, appRepository.bookRepository)
                 page.disposeOldPage()
-
-                // Inbox capture: sync handwriting to Obsidian markdown on exit
-                if (page.pageFromDb?.background == "inbox") {
-                    CoroutineScope(Dispatchers.IO).launch {
-                        try {
-                            InboxSyncEngine.syncInboxPage(appRepository, pageId)
-                        } catch (e: Exception) {
-                            log.e("Inbox sync failed: ${e.message}", e)
-                            SnackState.globalSnackFlow.tryEmit(
-                                SnackConf(
-                                    text = "Inbox sync failed: ${e.message}",
-                                    duration = 4000
-                                )
-                            )
-                        }
-                    }
-                }
             }
         }
 
@@ -216,7 +221,53 @@ fun EditorView(
                 Spacer(modifier = Modifier.weight(1f))
                 ScrollIndicator(state = editorState)
             }
-            PositionedToolbar(exportEngine,navController, appRepository, editorState, editorControlTower)
+            if (isInboxPage) {
+                // Inbox toolbar at top
+                InboxToolbar(
+                    selectedTags = selectedTags,
+                    suggestedTags = suggestedTags,
+                    onTagAdd = { tag ->
+                        if (tag !in selectedTags) selectedTags.add(tag)
+                    },
+                    onTagRemove = { tag -> selectedTags.remove(tag) },
+                    onSave = {
+                        if (!isSyncing) {
+                            isSyncing = true
+                            scope.launch(Dispatchers.IO) {
+                                try {
+                                    InboxSyncEngine.syncInboxPage(
+                                        appRepository, pageId, selectedTags.toList()
+                                    )
+                                    withContext(Dispatchers.Main) {
+                                        navController.popBackStack()
+                                    }
+                                } catch (e: Exception) {
+                                    isSyncing = false
+                                    log.e("Inbox sync failed: ${e.message}", e)
+                                    SnackState.globalSnackFlow.tryEmit(
+                                        SnackConf(
+                                            text = "Inbox sync failed: ${e.message}",
+                                            duration = 4000
+                                        )
+                                    )
+                                }
+                            }
+                        }
+                    },
+                    onDiscard = { navController.popBackStack() }
+                )
+                // Pen toolbar at bottom for inbox pages
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .fillMaxHeight()
+                ) {
+                    Spacer(modifier = Modifier.weight(1f))
+                    Toolbar(exportEngine, navController, appRepository, editorState, editorControlTower)
+                }
+            } else {
+                PositionedToolbar(exportEngine, navController, appRepository, editorState, editorControlTower)
+            }
             HorizontalScrollIndicator(state = editorState)
         }
     }

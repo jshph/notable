@@ -227,45 +227,19 @@ fun drawInboxBg(canvas: Canvas, scroll: Offset, scale: Float) {
     // White background
     canvas.drawColor(Color.WHITE)
 
-    val scrollY = scroll.y
+    // Lined content area — starts from the top since tags are handled by Compose UI
+    val offset = IntOffset(lineHeight, lineHeight) - IntOffset(
+        scroll.x.toInt() % lineHeight, scroll.y.toInt() % lineHeight
+    )
 
-    // Frontmatter zone background (light gray tint)
-    val zoneTop = -scrollY
-    val zoneBottom = INBOX_DIVIDER_Y - scrollY
-    if (zoneBottom > 0 && zoneTop < canvasHeight) {
-        canvas.drawRect(0f, maxOf(0f, zoneTop), width, minOf(canvasHeight, zoneBottom), inboxZonePaint)
-    }
-
-    // "created:" label + date
-    val createdY = INBOX_CREATED_Y - scrollY + INBOX_LABEL_TEXT_SIZE
-    if (createdY > -INBOX_LABEL_TEXT_SIZE && createdY < canvasHeight) {
-        canvas.drawText("created:", INBOX_LEFT_MARGIN, createdY, inboxLabelPaint)
-        val dateStr = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
-            .format(java.util.Date())
-        val labelWidth = inboxLabelPaint.measureText("created:  ")
-        canvas.drawText(dateStr, INBOX_LEFT_MARGIN + labelWidth, createdY, inboxValuePaint)
-    }
-
-    // "tags:" label — user handwrites tags to the right of this
-    val tagsY = INBOX_TAGS_LABEL_Y - scrollY + INBOX_LABEL_TEXT_SIZE
-    if (tagsY > -INBOX_LABEL_TEXT_SIZE && tagsY < canvasHeight) {
-        canvas.drawText("tags:", INBOX_LEFT_MARGIN, tagsY, inboxLabelPaint)
-    }
-
-    // Divider line (thicker, full width)
-    val dividerY = INBOX_DIVIDER_Y - scrollY
-    if (dividerY > 0 && dividerY < canvasHeight) {
-        canvas.drawLine(0f, dividerY, width, dividerY, inboxDividerPaint)
-    }
-
-    // Lined content area below the divider
-    val firstContentLine = INBOX_CONTENT_START_Y + lineHeight
-    var lineY = firstContentLine - scrollY
-    while (lineY < canvasHeight) {
-        if (lineY > 0) {
-            canvas.drawLine(INBOX_LEFT_MARGIN, lineY, width - INBOX_LEFT_MARGIN, lineY, defaultPaint)
-        }
-        lineY += lineHeight
+    for (y in 0..(canvasHeight.toInt()) step lineHeight) {
+        canvas.drawLine(
+            INBOX_LEFT_MARGIN,
+            y.toFloat() + offset.y,
+            width - INBOX_LEFT_MARGIN,
+            y.toFloat() + offset.y,
+            defaultPaint
+        )
     }
 }
 

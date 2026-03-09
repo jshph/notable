@@ -103,6 +103,8 @@ class EditorState(
 //            }
 //        }
 
+    var isInboxPage by mutableStateOf(false)
+
     var isToolbarOpen by mutableStateOf(
         persistedEditorSettings?.isToolbarOpen ?: false
     ) // should save
