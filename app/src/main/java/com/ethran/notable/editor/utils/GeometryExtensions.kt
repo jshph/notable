@@ -89,12 +89,16 @@ fun strokeToTouchPoints(stroke: Stroke): List<TouchPoint> {
 }
 
 
-fun TouchPoint.toStrokePoint(scroll: Offset, scale: Float): StrokePoint {
+fun TouchPoint.toStrokePoint(scroll: Offset, scale: Float, baseTimestamp: Long = 0L): StrokePoint {
+    val dt = if (baseTimestamp > 0L && timestamp > 0L) {
+        (timestamp - baseTimestamp).coerceIn(0, UShort.MAX_VALUE.toLong()).toUShort()
+    } else null
     return StrokePoint(
         x = x / scale + scroll.x,
         y = y / scale + scroll.y,
         pressure = pressure,
         tiltX = tiltX,
         tiltY = tiltY,
+        dt = dt,
     )
 }
