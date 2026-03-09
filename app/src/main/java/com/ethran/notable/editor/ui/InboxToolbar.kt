@@ -25,6 +25,7 @@ import androidx.compose.material.Text
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.runtime.Composable
@@ -51,7 +52,9 @@ fun InboxToolbar(
     selectedTags: List<String>,
     suggestedTags: List<String>,
     isExpanded: Boolean,
+    isToolbarOpen: Boolean,
     onToggleExpanded: () -> Unit,
+    onToggleToolbar: () -> Unit,
     onTagAdd: (String) -> Unit,
     onTagRemove: (String) -> Unit,
     onSave: () -> Unit,
@@ -126,6 +129,29 @@ fun InboxToolbar(
                     else Icons.Default.KeyboardArrowDown,
                     contentDescription = if (isExpanded) "Collapse tags" else "Expand tags",
                     tint = Color.DarkGray,
+                    modifier = Modifier.size(22.dp)
+                )
+            }
+
+            // Pen toolbar toggle
+            Box(
+                modifier = Modifier
+                    .border(
+                        1.5.dp,
+                        if (isToolbarOpen) Color.Black else Color.DarkGray,
+                        RoundedCornerShape(8.dp)
+                    )
+                    .background(
+                        if (isToolbarOpen) Color.Black else Color.Transparent,
+                        RoundedCornerShape(8.dp)
+                    )
+                    .clickable { onToggleToolbar() }
+                    .padding(horizontal = 14.dp, vertical = 8.dp)
+            ) {
+                Icon(
+                    Icons.Default.Edit,
+                    contentDescription = if (isToolbarOpen) "Hide pen toolbar" else "Show pen toolbar",
+                    tint = if (isToolbarOpen) Color.White else Color.DarkGray,
                     modifier = Modifier.size(22.dp)
                 )
             }

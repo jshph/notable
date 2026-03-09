@@ -231,8 +231,12 @@ fun EditorView(
                     selectedTags = selectedTags,
                     suggestedTags = suggestedTags,
                     isExpanded = editorState.isInboxTagsExpanded,
+                    isToolbarOpen = editorState.isToolbarOpen,
                     onToggleExpanded = {
                         editorState.isInboxTagsExpanded = !editorState.isInboxTagsExpanded
+                    },
+                    onToggleToolbar = {
+                        editorState.isToolbarOpen = !editorState.isToolbarOpen
                     },
                     onTagAdd = { tag ->
                         if (tag !in selectedTags) selectedTags.add(tag)
@@ -264,14 +268,16 @@ fun EditorView(
                     },
                     onDiscard = { navController.popBackStack() }
                 )
-                // Pen toolbar at bottom for inbox pages
-                Column(
-                    Modifier
-                        .fillMaxWidth()
-                        .fillMaxHeight()
-                ) {
-                    Spacer(modifier = Modifier.weight(1f))
-                    Toolbar(exportEngine, navController, appRepository, editorState, editorControlTower)
+                // Pen toolbar at bottom for inbox pages — only when open
+                if (editorState.isToolbarOpen) {
+                    Column(
+                        Modifier
+                            .fillMaxWidth()
+                            .fillMaxHeight()
+                    ) {
+                        Spacer(modifier = Modifier.weight(1f))
+                        Toolbar(exportEngine, navController, appRepository, editorState, editorControlTower)
+                    }
                 }
             } else {
                 PositionedToolbar(exportEngine, navController, appRepository, editorState, editorControlTower)
