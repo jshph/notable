@@ -1,9 +1,12 @@
 package com.ethran.notable.editor.utils
 
 import androidx.core.graphics.toRect
+import com.ethran.notable.data.db.Annotation
+import com.ethran.notable.data.db.AnnotationType
 import com.ethran.notable.data.db.Stroke
 import com.ethran.notable.data.db.StrokePoint
 import com.ethran.notable.editor.PageView
+import com.ethran.notable.editor.state.AnnotationMode
 import com.onyx.android.sdk.api.device.epd.EpdController
 import io.shipbook.shipbooksdk.ShipBook
 
@@ -43,5 +46,39 @@ fun handleDraw(
         historyBucket.add(stroke.id)
     } catch (e: Exception) {
         log.e("Handle Draw: An error occurred while handling the drawing: ${e.message}")
+    }
+}
+
+fun handleAnnotation(
+    page: PageView,
+    annotationMode: AnnotationMode,
+    touchPoints: List<StrokePoint>
+): String? {
+    try {
+        if (touchPoints.isEmpty() || annotationMode == AnnotationMode.None) return null
+
+        val boundingBox = calculateBoundingBox(touchPoints) { Pair(it.x, it.y) }
+
+        val type = when (annotationMode) {
+            AnnotationMode.WikiLink -> AnnotationType.WIKILINK.name
+            AnnotationMode.Tag -> AnnotationType.TAG.name
+            else -> return null
+        }
+
+        val annotation = Annotation(
+            type = type,
+            x = boundingBox.left,
+            y = boundingBox.top,
+            width = boundingBox.right - boundingBox.left,
+            height = boundingBox.bottom - boundingBox.top,
+            pageId = page.currentPageId
+        )
+
+        page.addAnnotations(listOf(annotation))
+        page.drawAreaPageCoordinates(boundingBox.toRect())
+        return annotation.id
+    } catch (e: Exception) {
+        log.e("Handle Annotation: An error occurred: ${e.message}")
+        return null
     }
 }

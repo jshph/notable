@@ -21,6 +21,8 @@ import com.ethran.notable.editor.utils.calculateBoundingBox
 import com.ethran.notable.editor.utils.copyInput
 import com.ethran.notable.editor.utils.copyInputToSimplePointF
 import com.ethran.notable.editor.utils.getModifiedStrokeEndpoints
+import com.ethran.notable.editor.state.AnnotationMode
+import com.ethran.notable.editor.utils.handleAnnotation
 import com.ethran.notable.editor.utils.handleDraw
 import com.ethran.notable.editor.utils.handleErase
 import com.ethran.notable.editor.utils.handleScribbleToErase
@@ -305,16 +307,30 @@ class OnyxInputHandler(
                             firstPointTime
                         )
                         if (erasedByScribbleDirtyRect.isNullOrEmpty()) {
-                            log.d("Drawing...")
-                            // draw the stroke
-                            handleDraw(
-                                drawCanvas.page,
-                                strokeHistoryBatch,
-                                drawCanvas.getActualState().penSettings[drawCanvas.getActualState().pen.penName]!!.strokeSize,
-                                drawCanvas.getActualState().penSettings[drawCanvas.getActualState().pen.penName]!!.color,
-                                drawCanvas.getActualState().pen,
-                                scaledPoints
-                            )
+                            val annotMode = drawCanvas.getActualState().annotationMode
+                            if (annotMode != AnnotationMode.None) {
+                                log.d("Creating annotation...")
+                                handleAnnotation(
+                                    drawCanvas.page,
+                                    annotMode,
+                                    scaledPoints
+                                )
+                                // Reset to one-shot: annotation mode turns off after one box
+                                drawCanvas.getActualState().annotationMode = AnnotationMode.None
+                                // Refresh canvas to show the annotation overlay
+                                drawCanvas.drawCanvasToView(null)
+                            } else {
+                                log.d("Drawing...")
+                                // draw the stroke
+                                handleDraw(
+                                    drawCanvas.page,
+                                    strokeHistoryBatch,
+                                    drawCanvas.getActualState().penSettings[drawCanvas.getActualState().pen.penName]!!.strokeSize,
+                                    drawCanvas.getActualState().penSettings[drawCanvas.getActualState().pen.penName]!!.color,
+                                    drawCanvas.getActualState().pen,
+                                    scaledPoints
+                                )
+                            }
                         } else {
                             log.d("Erased by scribble, $erasedByScribbleDirtyRect")
                             drawCanvas.drawCanvasToView(erasedByScribbleDirtyRect)

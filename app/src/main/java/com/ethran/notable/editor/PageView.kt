@@ -20,6 +20,7 @@ import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.CachedBackground
 import com.ethran.notable.data.PageDataManager
 import com.ethran.notable.data.datastore.GlobalAppSettings
+import com.ethran.notable.data.db.Annotation
 import com.ethran.notable.data.db.Image
 import com.ethran.notable.data.db.Page
 import com.ethran.notable.data.db.Stroke
@@ -94,6 +95,10 @@ class PageView(
     var images: List<Image>
         get() = PageDataManager.getImages(currentPageId)
         set(value) = PageDataManager.setImages(currentPageId, value)
+
+    var annotations: List<Annotation>
+        get() = PageDataManager.getAnnotations(currentPageId)
+        set(value) = PageDataManager.setAnnotations(currentPageId, value)
 
     private var currentBackground: CachedBackground
         get() = PageDataManager.getBackground(currentPageId)
@@ -344,6 +349,22 @@ class PageView(
 
     fun getStrokes(strokeIds: List<String>): List<Stroke?> {
         return PageDataManager.getStrokes(strokeIds, currentPageId)
+    }
+
+    fun addAnnotations(annotationsToAdd: List<Annotation>) {
+        annotations = annotations + annotationsToAdd
+        coroutineScope.launch(Dispatchers.IO) {
+            appRepository.annotationRepository.create(annotationsToAdd)
+        }
+        persistBitmapDebounced()
+    }
+
+    fun removeAnnotations(annotationIds: List<String>) {
+        annotations = annotations.filter { a -> a.id !in annotationIds }
+        coroutineScope.launch(Dispatchers.IO) {
+            appRepository.annotationRepository.deleteAll(annotationIds)
+        }
+        persistBitmapDebounced()
     }
 
     fun updateHeightForChange(strokesChanged: List<Stroke>) {

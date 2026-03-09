@@ -19,6 +19,10 @@ enum class Mode {
     Draw, Erase, Select, Line
 }
 
+enum class AnnotationMode {
+    None, WikiLink, Tag
+}
+
 @Stable
 class MenuStates {
     var isStrokeSelectionOpen by mutableStateOf(false)
@@ -94,6 +98,7 @@ class EditorState(
 
     var isInboxPage by mutableStateOf(false)
     var isInboxTagsExpanded by mutableStateOf(false)
+    var annotationMode by mutableStateOf(AnnotationMode.None)
 
     var isToolbarOpen by mutableStateOf(persistedEditorSettings?.isToolbarOpen ?: false)
     var penSettings by mutableStateOf(persistedEditorSettings?.penSettings ?: Pen.DEFAULT_SETTINGS)

@@ -14,6 +14,8 @@ import androidx.core.graphics.toRect
 import androidx.core.graphics.withClip
 import androidx.core.net.toUri
 import com.ethran.notable.data.datastore.GlobalAppSettings
+import com.ethran.notable.data.db.Annotation
+import com.ethran.notable.data.db.AnnotationType
 import com.ethran.notable.data.db.Image
 import com.ethran.notable.data.db.getBackgroundType
 import com.ethran.notable.data.model.BackgroundType
@@ -27,6 +29,44 @@ import com.ethran.notable.ui.showHint
 import io.shipbook.shipbooksdk.ShipBook
 
 private val pageDrawingLog = ShipBook.getLogger("PageDrawingLog")
+
+// Annotation overlay paints
+private val wikiLinkPaint = Paint().apply {
+    color = Color.argb(50, 0, 100, 255) // semi-transparent blue fill
+    style = Paint.Style.FILL
+}
+private val wikiLinkBorderPaint = Paint().apply {
+    color = Color.argb(180, 0, 100, 255) // blue border
+    style = Paint.Style.STROKE
+    strokeWidth = 2f
+    isAntiAlias = true
+}
+private val tagPaint = Paint().apply {
+    color = Color.argb(50, 0, 180, 0) // semi-transparent green fill
+    style = Paint.Style.FILL
+}
+private val tagBorderPaint = Paint().apply {
+    color = Color.argb(180, 0, 180, 0) // green border
+    style = Paint.Style.STROKE
+    strokeWidth = 2f
+    isAntiAlias = true
+}
+
+fun drawAnnotation(canvas: Canvas, annotation: Annotation, offset: Offset) {
+    val rect = RectF(
+        annotation.x + offset.x,
+        annotation.y + offset.y,
+        annotation.x + annotation.width + offset.x,
+        annotation.y + annotation.height + offset.y
+    )
+    val (fillPaint, borderPaint) = if (annotation.type == AnnotationType.WIKILINK.name) {
+        wikiLinkPaint to wikiLinkBorderPaint
+    } else {
+        tagPaint to tagBorderPaint
+    }
+    canvas.drawRect(rect, fillPaint)
+    canvas.drawRect(rect, borderPaint)
+}
 
 
 /**
@@ -175,6 +215,19 @@ fun drawOnCanvasFromPage(
         } catch (e: Exception) {
             pageDrawingLog.e("PageView.kt: Drawing strokes failed: ${e.message}", e)
             showHint("Error drawing strokes", page.coroutineScope)
+        }
+        // Draw annotation overlays on top of strokes
+        try {
+            page.annotations.forEach { annotation ->
+                val annotRect = RectF(
+                    annotation.x, annotation.y,
+                    annotation.x + annotation.width, annotation.y + annotation.height
+                )
+                if (!annotRect.toRect().intersect(pageArea)) return@forEach
+                drawAnnotation(this, annotation, -page.scroll)
+            }
+        } catch (e: Exception) {
+            pageDrawingLog.e("Drawing annotations failed: ${e.message}", e)
         }
     }
 }

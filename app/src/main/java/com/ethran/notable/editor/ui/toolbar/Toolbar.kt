@@ -428,33 +428,6 @@ fun Toolbar(
                         .width(0.5.dp)
                         .background(Color.Black)
                 )
-
-                ToolbarButton(
-                    onSelect = {
-                        scope.launch {
-                            controlTower.undo()
-                        }
-                    },
-                    iconId = R.drawable.undo,
-                    contentDescription = "undo"
-                )
-
-                ToolbarButton(
-                    onSelect = {
-                        scope.launch {
-                            controlTower.redo()
-                        }
-                    },
-                    iconId = R.drawable.redo,
-                    contentDescription = "redo"
-                )
-
-                Box(
-                    Modifier
-                        .fillMaxHeight()
-                        .width(0.5.dp)
-                        .background(Color.Black)
-                )
                 if (state.bookId != null) {
                     var book by remember(state.bookId) { mutableStateOf<Notebook?>(null) }
                     LaunchedEffect(state.bookId) {

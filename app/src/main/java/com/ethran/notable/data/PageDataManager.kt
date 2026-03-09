@@ -10,6 +10,7 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.ui.geometry.Offset
 import com.ethran.notable.SCREEN_HEIGHT
 import com.ethran.notable.SCREEN_WIDTH
+import com.ethran.notable.data.db.Annotation
 import com.ethran.notable.data.db.Image
 import com.ethran.notable.data.db.Stroke
 import com.ethran.notable.data.db.getBackgroundType
@@ -74,6 +75,8 @@ object PageDataManager {
 
     private val images = LinkedHashMap<String, MutableList<Image>>()
     private var imagesById = LinkedHashMap<String, HashMap<String, Image>>()
+
+    private val annotations = LinkedHashMap<String, MutableList<Annotation>>()
 
     private val backgroundCache = LinkedHashMap<String, CachedBackground>()
     private val pageToBackgroundKey = HashMap<String, String>()
@@ -274,6 +277,8 @@ object PageDataManager {
             cacheStrokes(pageId, pageWithStrokes.strokes)
             val pageWithImages = appRepository.pageRepository.getWithImageById(pageId)
             cacheImages(pageId, pageWithImages.images)
+            val pageAnnotations = appRepository.annotationRepository.getByPageId(pageId)
+            cacheAnnotations(pageId, pageAnnotations)
             recomputeHeight(pageId)
             indexImages(coroutineScope, pageId)
             indexStrokes(coroutineScope, pageId)
@@ -486,6 +491,12 @@ object PageDataManager {
         return imageIds.map { i -> imagesById[pageId]?.get(i) }
     }
 
+    fun getAnnotations(pageId: String): List<Annotation> = annotations[pageId] ?: emptyList()
+
+    fun setAnnotations(pageId: String, annotations: List<Annotation>) {
+        this.annotations[pageId] = annotations.toMutableList()
+    }
+
 
     // Assuming Rect uses 'left', 'top', 'right', 'bottom'
     fun getImagesInRectangle(inPageCoordinates: Rect, id: String): List<Image>? {
@@ -528,6 +539,12 @@ object PageDataManager {
                 log.d("Joining images drawn during page loading and existing images")
                 this.images[pageId]?.addAll(images)
             }
+        }
+    }
+
+    private fun cacheAnnotations(pageId: String, annotations: List<Annotation>) {
+        synchronized(accessLock) {
+            this.annotations[pageId] = annotations.toMutableList()
         }
     }
 
@@ -719,6 +736,7 @@ object PageDataManager {
         synchronized(accessLock) {
             strokes.remove(pageId)
             images.remove(pageId)
+            annotations.remove(pageId)
             pageHigh.remove(pageId)
             pageZoom.remove(pageId)
             pageScroll.remove(pageId)

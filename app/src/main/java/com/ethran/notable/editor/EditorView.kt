@@ -1,18 +1,10 @@
 package com.ethran.notable.editor
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.material.Text
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.unit.sp
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -26,20 +18,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.NavController
 import com.ethran.notable.data.AppRepository
-import com.ethran.notable.data.datastore.AppSettings
 import com.ethran.notable.data.datastore.EditorSettingCacheManager
-import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.editor.state.EditorState
 import com.ethran.notable.editor.state.History
+import com.ethran.notable.editor.ui.EditorSidebar
 import com.ethran.notable.editor.ui.EditorSurface
 import com.ethran.notable.editor.ui.HorizontalScrollIndicator
 import com.ethran.notable.editor.ui.InboxToolbar
 import com.ethran.notable.editor.ui.ScrollIndicator
 import com.ethran.notable.editor.ui.SelectedBitmap
-import com.ethran.notable.editor.ui.toolbar.Toolbar
 import com.ethran.notable.gestures.EditorGestureReceiver
 import com.ethran.notable.io.ExportEngine
-import com.ethran.notable.io.InboxSyncEngine
 import com.ethran.notable.io.SyncState
 import com.ethran.notable.io.VaultTagScanner
 import com.ethran.notable.io.exportToLinkedFile
@@ -51,7 +40,6 @@ import com.ethran.notable.ui.convertDpToPixel
 import com.ethran.notable.ui.theme.InkaTheme
 import com.ethran.notable.ui.views.LibraryDestination
 import io.shipbook.shipbooksdk.ShipBook
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -226,7 +214,7 @@ fun EditorView(
                 ScrollIndicator(state = editorState)
             }
             if (isInboxPage) {
-                // Inbox toolbar at top
+                // Inbox toolbar at top (Back, Capture, Save & Exit)
                 InboxToolbar(
                     selectedTags = selectedTags,
                     suggestedTags = suggestedTags,
@@ -250,20 +238,9 @@ fun EditorView(
                     },
                     onDiscard = { navController.popBackStack() }
                 )
-                // Pen toolbar at bottom for inbox pages — only when open
-                if (editorState.isToolbarOpen) {
-                    Column(
-                        Modifier
-                            .fillMaxWidth()
-                            .fillMaxHeight()
-                    ) {
-                        Spacer(modifier = Modifier.weight(1f))
-                        Toolbar(exportEngine, navController, appRepository, editorState, editorControlTower)
-                    }
-                }
-            } else {
-                PositionedToolbar(exportEngine, navController, appRepository, editorState, editorControlTower)
             }
+            // Left-edge sidebar with all tools
+            EditorSidebar(exportEngine, navController, appRepository, editorState, editorControlTower)
             HorizontalScrollIndicator(state = editorState)
 
         }
@@ -271,33 +248,3 @@ fun EditorView(
 }
 
 
-@Composable
-fun PositionedToolbar(
-    exportEngine: ExportEngine,
-    navController: NavController,
-    appRepository: AppRepository,
-    editorState: EditorState,
-    editorControlTower: EditorControlTower
-) {
-    val position = GlobalAppSettings.current.toolbarPosition
-
-    when (position) {
-        AppSettings.Position.Top -> {
-            Toolbar(
-                exportEngine,
-                navController, appRepository, editorState, editorControlTower
-            )
-        }
-
-        AppSettings.Position.Bottom -> {
-            Column(
-                Modifier
-                    .fillMaxWidth()
-                    .fillMaxHeight()
-            ) {
-                Spacer(modifier = Modifier.weight(1f))
-                Toolbar(exportEngine, navController, appRepository, editorState, editorControlTower)
-            }
-        }
-    }
-}
