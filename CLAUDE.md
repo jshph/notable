@@ -71,7 +71,10 @@ KEY_PASSWORD=notable123 \
 adb install -r app/build/outputs/apk/release/app-release.apk
 ```
 
-**Note:** Switching between debug and release signing requires uninstalling first (`adb uninstall com.ethran.notable`) which wipes app data.
+**Important notes:**
+- Switching between debug and release signing requires uninstalling first (`adb uninstall com.ethran.notable`) which wipes app data (settings, pages, etc.)
+- After installing a release APK, wait ~30s for dex2oat compilation to finish before launching. The device may show "install" prompt if the app hasn't finished compiling. A reboot can help.
+- Prefer `./gradlew installDebug` for development iteration — it avoids signing key conflicts
 
 ## Deploying to Onyx Boox
 

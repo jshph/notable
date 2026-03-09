@@ -1,6 +1,7 @@
 package com.ethran.notable.io
 
 import android.os.Environment
+import androidx.compose.runtime.mutableStateOf
 import io.shipbook.shipbooksdk.ShipBook
 import java.io.File
 
@@ -14,17 +15,17 @@ data class TagScore(
 
 object VaultTagScanner {
 
-    // Cached tags — pre-populated on app start
-    @Volatile
-    var cachedTags: List<String> = emptyList()
-        private set
+    // Observable tag cache — Compose UI recomposes when this changes
+    private val _cachedTags = mutableStateOf<List<String>>(emptyList())
+    val cachedTags: List<String>
+        get() = _cachedTags.value
 
     /**
      * Refresh the tag cache in the background. Call from app initialization.
      */
     fun refreshCache(inboxPath: String) {
-        cachedTags = scanTags(inboxPath)
-        log.i("Tag cache refreshed: ${cachedTags.size} tags")
+        _cachedTags.value = scanTags(inboxPath)
+        log.i("Tag cache refreshed: ${_cachedTags.value.size} tags")
     }
 
     /**

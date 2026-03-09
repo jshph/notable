@@ -160,7 +160,8 @@ fun EditorView(
         var isInboxPage by remember { mutableStateOf(false) }
         var isSyncing by remember { mutableStateOf(false) }
         val selectedTags = remember { mutableStateListOf<String>() }
-        val suggestedTags = remember { mutableStateListOf<String>() }
+        // Read tags reactively — updates when VaultTagScanner.refreshCache() runs
+        val suggestedTags = VaultTagScanner.cachedTags
 
         LaunchedEffect(pageId) {
             val pageData = withContext(Dispatchers.IO) {
@@ -169,10 +170,6 @@ fun EditorView(
             val inbox = pageData?.background == "inbox"
             isInboxPage = inbox
             editorState.isInboxPage = inbox
-            if (inbox) {
-                // Use pre-cached tags (scanned on app start)
-                suggestedTags.addAll(VaultTagScanner.cachedTags)
-            }
         }
 
         DisposableEffect(Unit) {
