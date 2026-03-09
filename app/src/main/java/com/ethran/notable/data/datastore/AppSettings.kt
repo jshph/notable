@@ -49,6 +49,9 @@ data class AppSettings(
     val enableQuickNav: Boolean = true,
 
 
+    // Inbox Capture
+    val obsidianInboxPath: String = "Documents/primary/inbox",
+
     // Debug
     val showWelcome: Boolean = true,
     // [system information -- does not have a setting]

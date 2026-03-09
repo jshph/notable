@@ -30,6 +30,7 @@ import com.ethran.notable.editor.ui.SelectedBitmap
 import com.ethran.notable.editor.ui.toolbar.Toolbar
 import com.ethran.notable.gestures.EditorGestureReceiver
 import com.ethran.notable.io.ExportEngine
+import com.ethran.notable.io.InboxSyncEngine
 import com.ethran.notable.io.exportToLinkedFile
 import com.ethran.notable.navigation.NavigationDestination
 import com.ethran.notable.ui.LocalSnackContext
@@ -39,6 +40,7 @@ import com.ethran.notable.ui.convertDpToPixel
 import com.ethran.notable.ui.theme.InkaTheme
 import com.ethran.notable.ui.views.LibraryDestination
 import io.shipbook.shipbooksdk.ShipBook
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -151,6 +153,23 @@ fun EditorView(
                 if (bookId != null)
                     exportToLinkedFile(exportEngine, bookId, appRepository.bookRepository)
                 page.disposeOldPage()
+
+                // Inbox capture: sync handwriting to Obsidian markdown on exit
+                if (page.pageFromDb?.background == "inbox") {
+                    CoroutineScope(Dispatchers.IO).launch {
+                        try {
+                            InboxSyncEngine.syncInboxPage(appRepository, pageId)
+                        } catch (e: Exception) {
+                            log.e("Inbox sync failed: ${e.message}", e)
+                            SnackState.globalSnackFlow.tryEmit(
+                                SnackConf(
+                                    text = "Inbox sync failed: ${e.message}",
+                                    duration = 4000
+                                )
+                            )
+                        }
+                    }
+                }
             }
         }
 
