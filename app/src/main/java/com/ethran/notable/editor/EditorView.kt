@@ -244,7 +244,7 @@ fun EditorView(
                     onTagRemove = { tag -> selectedTags.remove(tag) },
                     onSave = {
                         SyncState.launchSync(
-                            appRepository, pageId, selectedTags.toList()
+                            appRepository, pageId, selectedTags.toList(), context
                         )
                         navController.popBackStack()
                     },

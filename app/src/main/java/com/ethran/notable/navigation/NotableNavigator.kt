@@ -18,7 +18,6 @@ import com.ethran.notable.editor.canvas.CanvasEventBus
 import com.ethran.notable.editor.utils.refreshScreen
 import com.ethran.notable.ui.views.LibraryDestination
 import com.ethran.notable.ui.views.SystemInformationDestination
-import com.ethran.notable.ui.views.InkTestDestination
 import com.ethran.notable.ui.views.WelcomeDestination
 import com.ethran.notable.utils.hasFilePermission
 import io.shipbook.shipbooksdk.ShipBook
@@ -126,10 +125,6 @@ class NotableNavigator(
 
     fun goToSystemInfo() {
         navController.navigate(SystemInformationDestination.route)
-    }
-
-    fun goToInkTest() {
-        navController.navigate(InkTestDestination.route)
     }
 
     fun goToPage(appRepository: AppRepository, pageId: String) {
