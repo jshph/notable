@@ -120,8 +120,8 @@ object InboxSyncEngine {
             val ink = buildInk(lineStrokes)
             val writingArea = computeWritingArea(lineStrokes)
             val context = RecognitionContext.builder()
+                .setPreContext(preContext)
                 .setWritingArea(writingArea)
-                .apply { if (preContext.isNotEmpty()) setPreContext(preContext) }
                 .build()
 
             val text = suspendCancellableCoroutine<String> { cont ->
