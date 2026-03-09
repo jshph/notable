@@ -34,6 +34,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
@@ -70,6 +71,8 @@ import compose.icons.FeatherIcons
 import compose.icons.feathericons.EyeOff
 import compose.icons.feathericons.RefreshCcw
 import compose.icons.feathericons.Clipboard
+import com.onyx.android.sdk.api.device.epd.EpdController
+import com.onyx.android.sdk.api.device.epd.UpdateMode
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -80,7 +83,7 @@ private val log = ShipBook.getLogger("EditorSidebar")
 private val SIZES_STROKES_DEFAULT = listOf("S" to 3f, "M" to 5f, "L" to 10f, "XL" to 20f)
 private val SIZES_MARKER_DEFAULT = listOf("M" to 25f, "L" to 40f, "XL" to 60f, "XXL" to 80f)
 
-private const val SIDEBAR_WIDTH = 56
+const val SIDEBAR_WIDTH = 56
 private const val BUTTON_SIZE = 46
 private const val ICON_SIZE = 26
 
@@ -95,7 +98,27 @@ fun EditorSidebar(
 ) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+    val view = LocalView.current
     val zoomLevel by state.pageView.zoomLevel.collectAsState()
+
+    // Force e-ink refresh when sidebar state changes.
+    // The Onyx SDK sets a global display scheme that suppresses normal view updates,
+    // so we need to explicitly tell the e-ink controller to refresh.
+    fun refreshSidebar() {
+        view.postInvalidate()
+        try {
+            val sidebarPx = convertDpToPixel(SIDEBAR_WIDTH.dp, context).toInt()
+            // Use the root view's location to get absolute screen coordinates
+            val loc = IntArray(2)
+            view.getLocationOnScreen(loc)
+            EpdController.refreshScreenRegion(
+                view, loc[0], loc[1], sidebarPx, view.height, UpdateMode.GC
+            )
+            log.i("Sidebar e-ink refresh triggered")
+        } catch (e: Exception) {
+            log.w("E-ink sidebar refresh failed: ${e.message}")
+        }
+    }
 
     val pickMedia = rememberLauncherForActivityResult(contract = PickVisualMedia()) { uri ->
         if (uri == null) {
@@ -182,6 +205,8 @@ fun EditorSidebar(
         modifier = Modifier
             .width(SIDEBAR_WIDTH.dp)
             .fillMaxHeight()
+            .background(Color.White)
+            .noRippleClickable { log.i("Sidebar background tapped (event consumed)") }
             .padding(horizontal = 4.dp),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
@@ -190,7 +215,10 @@ fun EditorSidebar(
         SidebarIconButton(
             vectorIcon = FeatherIcons.EyeOff,
             contentDescription = "close toolbar",
-            onClick = { state.isToolbarOpen = false }
+            onClick = {
+                log.i("Close toolbar tapped")
+                state.isToolbarOpen = false
+            }
         )
 
         SidebarDivider()
@@ -204,6 +232,7 @@ fun EditorSidebar(
                 contentDescription = "pen",
                 isSelected = state.mode == Mode.Draw,
                 onClick = {
+                    log.i("Pen button tapped, current mode=${state.mode}")
                     if (state.mode == Mode.Draw) {
                         isPenPickerOpen = !isPenPickerOpen
                         isEraserMenuOpen = false
@@ -211,6 +240,7 @@ fun EditorSidebar(
                         state.mode = Mode.Draw
                         isPenPickerOpen = false
                     }
+                    refreshSidebar()
                 }
             )
             if (isPenPickerOpen) {
@@ -237,6 +267,7 @@ fun EditorSidebar(
                         state.mode = Mode.Erase
                         isEraserMenuOpen = false
                     }
+                    refreshSidebar()
                 }
             )
             if (isEraserMenuOpen) {
@@ -264,6 +295,7 @@ fun EditorSidebar(
                 state.mode = Mode.Select
                 isPenPickerOpen = false
                 isEraserMenuOpen = false
+                refreshSidebar()
             }
         )
 
@@ -277,6 +309,7 @@ fun EditorSidebar(
                 else state.mode = Mode.Line
                 isPenPickerOpen = false
                 isEraserMenuOpen = false
+                refreshSidebar()
             }
         )
 
@@ -308,12 +341,15 @@ fun EditorSidebar(
             contentDescription = "Wiki link",
             isSelected = state.annotationMode == AnnotationMode.WikiLink,
             onClick = {
+                log.i("[[ button tapped, annotationMode=${state.annotationMode}")
                 state.annotationMode = if (state.annotationMode == AnnotationMode.WikiLink)
                     AnnotationMode.None else AnnotationMode.WikiLink
+                log.i("[[ button: annotationMode now=${state.annotationMode}, setting mode=Draw")
                 // Ensure we're in draw mode so the stylus gesture gets captured
                 if (state.annotationMode != AnnotationMode.None) state.mode = Mode.Draw
                 isPenPickerOpen = false
                 isEraserMenuOpen = false
+                refreshSidebar()
             }
         )
 
@@ -328,6 +364,7 @@ fun EditorSidebar(
                 if (state.annotationMode != AnnotationMode.None) state.mode = Mode.Draw
                 isPenPickerOpen = false
                 isEraserMenuOpen = false
+                refreshSidebar()
             }
         )
 

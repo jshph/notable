@@ -4,7 +4,9 @@ import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.Rect
 import android.graphics.RectF
+import android.graphics.Region
 import com.ethran.notable.data.datastore.GlobalAppSettings
+import com.ethran.notable.data.db.Annotation
 import com.ethran.notable.data.db.Stroke
 import com.ethran.notable.data.db.StrokePoint
 import com.ethran.notable.data.model.SimplePointF
@@ -164,19 +166,67 @@ fun handleErase(
     }
 
     val deletedStrokes = selectStrokesFromPath(page.strokes, outPath)
+    val deletedAnnotations = selectAnnotationsFromPath(page.annotations, outPath)
 
     val deletedStrokeIds = deletedStrokes.map { it.id }
+    val deletedAnnotationIds = deletedAnnotations.map { it.id }
 
-    if (deletedStrokes.isEmpty()) return null
-    page.removeStrokes(deletedStrokeIds)
+    if (deletedStrokes.isEmpty() && deletedAnnotations.isEmpty()) return null
 
-    history.addOperationsToHistory(listOf(Operation.AddStroke(deletedStrokes)))
+    if (deletedStrokes.isNotEmpty()) {
+        page.removeStrokes(deletedStrokeIds)
+        history.addOperationsToHistory(listOf(Operation.AddStroke(deletedStrokes)))
+    }
+    if (deletedAnnotations.isNotEmpty()) {
+        page.removeAnnotations(deletedAnnotationIds)
+    }
 
-    val effectedArea = page.toScreenCoordinates(strokeBounds(deletedStrokes))
+    val strokeArea = if (deletedStrokes.isNotEmpty()) strokeBounds(deletedStrokes) else null
+    val annotArea = if (deletedAnnotations.isNotEmpty()) annotationBounds(deletedAnnotations) else null
+    val combinedArea = when {
+        strokeArea != null && annotArea != null -> {
+            strokeArea.union(annotArea); strokeArea
+        }
+        strokeArea != null -> strokeArea
+        annotArea != null -> annotArea
+        else -> return null
+    }
+
+    val effectedArea = page.toScreenCoordinates(combinedArea)
     page.drawAreaScreenCoordinates(screenArea = effectedArea)
     return effectedArea
 }
 
+
+private fun selectAnnotationsFromPath(annotations: List<Annotation>, eraserPath: Path): List<Annotation> {
+    val eraserRegion = Region()
+    val clipBounds = Region(-10000, -10000, 10000, 10000)
+    eraserRegion.setPath(eraserPath, clipBounds)
+
+    return annotations.filter { annotation ->
+        val annotRect = Rect(
+            annotation.x.toInt(), annotation.y.toInt(),
+            (annotation.x + annotation.width).toInt(),
+            (annotation.y + annotation.height).toInt()
+        )
+        val annotRegion = Region(annotRect)
+        !annotRegion.op(eraserRegion, Region.Op.INTERSECT).not()
+    }
+}
+
+private fun annotationBounds(annotations: List<Annotation>): Rect {
+    var left = Float.MAX_VALUE
+    var top = Float.MAX_VALUE
+    var right = Float.MIN_VALUE
+    var bottom = Float.MIN_VALUE
+    for (a in annotations) {
+        if (a.x < left) left = a.x
+        if (a.y < top) top = a.y
+        if (a.x + a.width > right) right = a.x + a.width
+        if (a.y + a.height > bottom) bottom = a.y + a.height
+    }
+    return Rect(left.toInt(), top.toInt(), right.toInt(), bottom.toInt())
+}
 
 // points is in page coordinates, returns effected area.
 fun cleanAllStrokes(

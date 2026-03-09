@@ -55,6 +55,7 @@ class CanvasObserverRegistry(
         observeIsDrawingSnapshot()
         observeToolbar()
         observeMode()
+        observeAnnotationMode()
         observeHistory()
         observeSaveCurrent()
         observeQuickNav()
@@ -229,6 +230,17 @@ class CanvasObserverRegistry(
                 logCanvasObserver.v("mode change: ${drawCanvas.getActualState().mode}")
                 inputHandler.updatePenAndStroke()
                 refreshManager.refreshUiSuspend()
+            }
+        }
+    }
+
+    private fun observeAnnotationMode() {
+        coroutineScope.launch {
+            snapshotFlow { drawCanvas.getActualState().annotationMode }.drop(1).collect {
+                logCanvasObserver.v("annotation mode change: ${drawCanvas.getActualState().annotationMode}")
+                inputHandler.updatePenAndStroke()
+                // Briefly unfreeze e-ink display so sidebar button state becomes visible
+                refreshManager.refreshUi(null)
             }
         }
     }

@@ -32,23 +32,23 @@ private val pageDrawingLog = ShipBook.getLogger("PageDrawingLog")
 
 // Annotation overlay paints
 private val wikiLinkPaint = Paint().apply {
-    color = Color.argb(50, 0, 100, 255) // semi-transparent blue fill
+    color = Color.argb(130, 0, 100, 255) // semi-transparent blue fill
     style = Paint.Style.FILL
 }
 private val wikiLinkBorderPaint = Paint().apply {
-    color = Color.argb(180, 0, 100, 255) // blue border
+    color = Color.argb(255, 0, 80, 220) // solid blue border
     style = Paint.Style.STROKE
-    strokeWidth = 2f
+    strokeWidth = 4f
     isAntiAlias = true
 }
 private val tagPaint = Paint().apply {
-    color = Color.argb(50, 0, 180, 0) // semi-transparent green fill
+    color = Color.argb(130, 0, 180, 0) // semi-transparent green fill
     style = Paint.Style.FILL
 }
 private val tagBorderPaint = Paint().apply {
-    color = Color.argb(180, 0, 180, 0) // green border
+    color = Color.argb(255, 0, 150, 0) // solid green border
     style = Paint.Style.STROKE
-    strokeWidth = 2f
+    strokeWidth = 4f
     isAntiAlias = true
 }
 

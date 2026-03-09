@@ -30,6 +30,8 @@ import com.ethran.notable.editor.utils.handleSelect
 import com.ethran.notable.editor.utils.onSurfaceInit
 import com.ethran.notable.editor.utils.partialRefreshRegionOnce
 import com.ethran.notable.editor.utils.prepareForPartialUpdate
+import com.ethran.notable.editor.utils.refreshScreenRegion
+import com.ethran.notable.editor.utils.resetScreenFreeze
 import com.ethran.notable.editor.utils.restoreDefaults
 import com.ethran.notable.editor.utils.setupSurface
 import com.ethran.notable.editor.utils.transformToLine
@@ -132,6 +134,20 @@ class OnyxInputHandler(
     fun updatePenAndStroke() {
         if(touchHelper == null) return
         log.i("Update pen and stroke: pen=${state.pen}, mode=${state.mode}")
+        // When annotation mode is active, show a dashed outline instead of the normal pen stroke
+        if (state.annotationMode != AnnotationMode.None) {
+            val annotColor = if (state.annotationMode == AnnotationMode.WikiLink)
+                Color.rgb(0, 100, 255) else Color.rgb(0, 180, 0)
+            touchHelper!!.setStrokeStyle(Pen.DASHED.strokeStyle)
+                ?.setStrokeWidth(3f)
+                ?.setStrokeColor(annotColor)
+            Device.currentDevice().setStrokeParameters(
+                Pen.DASHED.strokeStyle,
+                floatArrayOf(5f, 9f, 9f, 0f)
+            )
+            return
+        }
+
         when (state.mode) {
             Mode.Draw, Mode.Line -> {
                 val setting = state.penSettings[state.pen.penName] ?: return
@@ -293,21 +309,25 @@ class OnyxInputHandler(
                         val lock = System.currentTimeMillis()
                         log.d("lock obtained in ${lock - startTime} ms")
 
-                        // Thread.sleep(1000)
                         // transform points to page space
                         val scaledPoints =
                             copyInput(plist.points, page.scroll, page.zoomLevel.value)
-                        val firstPointTime = plist.points.first().timestamp
-                        val erasedByScribbleDirtyRect = handleScribbleToErase(
-                            page,
-                            scaledPoints,
-                            history,
-                            drawCanvas.getActualState().pen,
-                            currentLastStrokeEndTime,
-                            firstPointTime
-                        )
+                        val annotMode = drawCanvas.getActualState().annotationMode
+                        // Skip scribble-to-erase when in annotation mode
+                        val erasedByScribbleDirtyRect = if (annotMode != AnnotationMode.None) {
+                            null
+                        } else {
+                            val firstPointTime = plist.points.first().timestamp
+                            handleScribbleToErase(
+                                page,
+                                scaledPoints,
+                                history,
+                                drawCanvas.getActualState().pen,
+                                currentLastStrokeEndTime,
+                                firstPointTime
+                            )
+                        }
                         if (erasedByScribbleDirtyRect.isNullOrEmpty()) {
-                            val annotMode = drawCanvas.getActualState().annotationMode
                             if (annotMode != AnnotationMode.None) {
                                 log.d("Creating annotation...")
                                 handleAnnotation(
@@ -317,8 +337,19 @@ class OnyxInputHandler(
                                 )
                                 // Reset to one-shot: annotation mode turns off after one box
                                 drawCanvas.getActualState().annotationMode = AnnotationMode.None
-                                // Refresh canvas to show the annotation overlay
+                                // Redraw canvas, then do a full GC refresh to clear
+                                // the Onyx SDK's dashed line preview artifacts from e-ink
                                 drawCanvas.drawCanvasToView(null)
+                                resetScreenFreeze(touchHelper!!)
+                                val bounds = calculateBoundingBox(scaledPoints) { Pair(it.x, it.y) }
+                                val padding = 20
+                                val dirtyRect = Rect(
+                                    (bounds.left - page.scroll.x - padding).toInt(),
+                                    (bounds.top - page.scroll.y - padding).toInt(),
+                                    (bounds.right - page.scroll.x + padding).toInt(),
+                                    (bounds.bottom - page.scroll.y + padding).toInt()
+                                )
+                                refreshScreenRegion(drawCanvas, dirtyRect)
                             } else {
                                 log.d("Drawing...")
                                 // draw the stroke
