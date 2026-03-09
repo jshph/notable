@@ -53,7 +53,25 @@ IS_NEXT=false
 ```
 
 ### Build output
-Debug APK is at: `app/build/outputs/apk/debug/app-debug.apk`
+- Debug APK: `app/build/outputs/apk/debug/app-debug.apk`
+- Release APK: `app/build/outputs/apk/release/app-release.apk`
+
+### Release signing
+The release build uses env vars for signing (configured in `app/build.gradle`). The keystore is at `notable-release.jks` (gitignored).
+
+```bash
+# Build signed release APK
+STORE_FILE=/Users/joshuapham/Hacks/notable/notable-release.jks \
+STORE_PASSWORD=notable123 \
+KEY_ALIAS=notable \
+KEY_PASSWORD=notable123 \
+./gradlew assembleRelease
+
+# Install release APK (must uninstall debug build first if switching signing keys)
+adb install -r app/build/outputs/apk/release/app-release.apk
+```
+
+**Note:** Switching between debug and release signing requires uninstalling first (`adb uninstall com.ethran.notable`) which wipes app data.
 
 ## Deploying to Onyx Boox
 
