@@ -11,6 +11,8 @@ import com.google.mlkit.vision.digitalink.recognition.DigitalInkRecognitionModel
 import com.google.mlkit.vision.digitalink.recognition.DigitalInkRecognitionModelIdentifier
 import com.google.mlkit.vision.digitalink.recognition.DigitalInkRecognizerOptions
 import com.google.mlkit.vision.digitalink.recognition.Ink
+import com.google.mlkit.vision.digitalink.recognition.RecognitionContext
+import com.google.mlkit.vision.digitalink.recognition.WritingArea
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.suspendCancellableCoroutine
 import java.io.File
@@ -100,42 +102,125 @@ object InboxSyncEngine {
         }
     }
 
+    /**
+     * Segment strokes into lines based on vertical position, recognize each
+     * line independently with WritingArea and pre-context, then join results.
+     */
     private suspend fun recognizeStrokes(strokes: List<Stroke>): String {
         val rec = recognizer
             ?: throw IllegalStateException("ML Kit recognizer not initialized")
 
-        val inkBuilder = Ink.builder()
+        val lines = segmentIntoLines(strokes)
+        log.i("Segmented ${strokes.size} strokes into ${lines.size} lines")
 
-        // Sort strokes by creation time, then by position for deterministic order
-        val sortedStrokes = strokes.sortedWith(
-            compareBy<Stroke> { it.createdAt.time }.thenBy { it.top }.thenBy { it.left }
+        val recognizedLines = mutableListOf<String>()
+        var preContext = ""
+
+        for (lineStrokes in lines) {
+            val ink = buildInk(lineStrokes)
+            val writingArea = computeWritingArea(lineStrokes)
+            val context = RecognitionContext.builder()
+                .setWritingArea(writingArea)
+                .apply { if (preContext.isNotEmpty()) setPreContext(preContext) }
+                .build()
+
+            val text = suspendCancellableCoroutine<String> { cont ->
+                rec.recognize(ink, context)
+                    .addOnSuccessListener { result ->
+                        cont.resume(result.candidates.firstOrNull()?.text ?: "")
+                    }
+                    .addOnFailureListener { cont.resumeWithException(it) }
+            }
+
+            if (text.isNotBlank()) {
+                recognizedLines.add(text)
+                // Use last ~20 chars as pre-context for the next line
+                preContext = text.takeLast(20)
+            }
+        }
+
+        return recognizedLines.joinToString("\n")
+    }
+
+    /**
+     * Group strokes into horizontal lines by clustering on vertical midpoint.
+     * Strokes whose vertical centers are within half a line-height of each
+     * other belong to the same line.
+     */
+    private fun segmentIntoLines(strokes: List<Stroke>): List<List<Stroke>> {
+        if (strokes.isEmpty()) return emptyList()
+
+        // Sort by vertical midpoint, then left edge
+        val sorted = strokes.sortedWith(
+            compareBy<Stroke> { (it.top + it.bottom) / 2f }.thenBy { it.left }
         )
 
-        // Use actual stroke creation timestamps as base, with synthetic
-        // per-point timing (~10ms between points, simulating natural writing)
-        for (stroke in sortedStrokes) {
+        // Estimate typical line height from median stroke height
+        val strokeHeights = sorted.map { it.bottom - it.top }.filter { it > 0 }.sorted()
+        val medianHeight = if (strokeHeights.isNotEmpty()) {
+            strokeHeights[strokeHeights.size / 2]
+        } else {
+            50f // fallback
+        }
+        // Strokes within 0.75x median height of each other are on the same line
+        val lineGapThreshold = medianHeight * 0.75f
+
+        val lines = mutableListOf<MutableList<Stroke>>()
+        var currentLine = mutableListOf(sorted.first())
+        var currentLineCenter = (sorted.first().top + sorted.first().bottom) / 2f
+
+        for (stroke in sorted.drop(1)) {
+            val strokeCenter = (stroke.top + stroke.bottom) / 2f
+            if (strokeCenter - currentLineCenter > lineGapThreshold) {
+                // New line
+                lines.add(currentLine)
+                currentLine = mutableListOf(stroke)
+                currentLineCenter = strokeCenter
+            } else {
+                currentLine.add(stroke)
+                // Update running average of line center
+                currentLineCenter = currentLine.map { (it.top + it.bottom) / 2f }.average().toFloat()
+            }
+        }
+        lines.add(currentLine)
+
+        // Sort strokes within each line left-to-right by creation time
+        return lines.map { line ->
+            line.sortedWith(compareBy<Stroke> { it.createdAt.time }.thenBy { it.left })
+        }
+    }
+
+    private fun buildInk(strokes: List<Stroke>): Ink {
+        val inkBuilder = Ink.builder()
+        for (stroke in strokes) {
             val strokeBuilder = Ink.Stroke.builder()
             val baseTime = stroke.createdAt.time
             for ((i, point) in stroke.points.withIndex()) {
                 val t = if (point.dt != null) {
                     baseTime + point.dt.toLong()
                 } else {
-                    baseTime + (i * 10L) // 10ms between points
+                    baseTime + (i * 10L)
                 }
                 strokeBuilder.addPoint(Ink.Point.create(point.x, point.y, t))
             }
             inkBuilder.addStroke(strokeBuilder.build())
         }
+        return inkBuilder.build()
+    }
 
-        val ink = inkBuilder.build()
-        return suspendCancellableCoroutine { cont ->
-            rec.recognize(ink)
-                .addOnSuccessListener { result ->
-                    val text = result.candidates.firstOrNull()?.text ?: ""
-                    cont.resume(text)
-                }
-                .addOnFailureListener { cont.resumeWithException(it) }
-        }
+    /**
+     * Compute a WritingArea from the bounding box of a set of strokes.
+     * Uses the line's full width and height so ML Kit can judge relative
+     * character sizes (e.g. uppercase vs lowercase).
+     */
+    private fun computeWritingArea(strokes: List<Stroke>): WritingArea {
+        val minLeft = strokes.minOf { it.left }
+        val maxRight = strokes.maxOf { it.right }
+        val minTop = strokes.minOf { it.top }
+        val maxBottom = strokes.maxOf { it.bottom }
+        val width = (maxRight - minLeft).coerceAtLeast(1f)
+        val height = (maxBottom - minTop).coerceAtLeast(1f)
+        return WritingArea(width, height)
     }
 
     /**
