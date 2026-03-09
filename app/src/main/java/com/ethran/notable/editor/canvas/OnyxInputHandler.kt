@@ -6,8 +6,11 @@ import android.graphics.RectF
 import android.util.Log
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.toRect
+import com.ethran.notable.data.datastore.AppSettings
 import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.editor.PageView
+import com.ethran.notable.editor.ui.INBOX_TOOLBAR_COLLAPSED_HEIGHT
+import com.ethran.notable.editor.ui.INBOX_TOOLBAR_EXPANDED_HEIGHT
 import com.ethran.notable.editor.state.EditorState
 import com.ethran.notable.editor.state.History
 import com.ethran.notable.editor.state.Mode
@@ -176,21 +179,35 @@ class OnyxInputHandler(
     }
 
     fun updateActiveSurface() {
-        // Takes at least 50ms on Note 4c,
-        // and I don't think that we need it immediately
         log.i("Update editable surface")
         coroutineScope.launch {
             onSurfaceInit(drawCanvas)
-            val toolbarHeight = when {
-                state.isInboxPage -> convertDpToPixel(210.dp, drawCanvas.context).toInt()
-                state.isToolbarOpen -> convertDpToPixel(40.dp, drawCanvas.context).toInt()
-                else -> 0
+            if (state.isInboxPage) {
+                val inboxToolbarHeight = if (state.isInboxTagsExpanded) {
+                    convertDpToPixel(INBOX_TOOLBAR_EXPANDED_HEIGHT, drawCanvas.context).toInt()
+                } else {
+                    convertDpToPixel(INBOX_TOOLBAR_COLLAPSED_HEIGHT, drawCanvas.context).toInt()
+                }
+                val penToolbarHeight = convertDpToPixel(40.dp, drawCanvas.context).toInt()
+                setupSurface(
+                    drawCanvas,
+                    touchHelper,
+                    topExcludeHeight = inboxToolbarHeight,
+                    bottomExcludeHeight = penToolbarHeight
+                )
+            } else {
+                val toolbarHeight = if (state.isToolbarOpen) {
+                    convertDpToPixel(40.dp, drawCanvas.context).toInt()
+                } else 0
+                val topExclude = if (GlobalAppSettings.current.toolbarPosition == AppSettings.Position.Top) toolbarHeight else 0
+                val bottomExclude = if (GlobalAppSettings.current.toolbarPosition == AppSettings.Position.Bottom) toolbarHeight else 0
+                setupSurface(
+                    drawCanvas,
+                    touchHelper,
+                    topExcludeHeight = topExclude,
+                    bottomExcludeHeight = bottomExclude
+                )
             }
-            setupSurface(
-                drawCanvas,
-                touchHelper,
-                toolbarHeight
-            )
         }
     }
     private fun onRawDrawingList(plist: TouchPointList) {

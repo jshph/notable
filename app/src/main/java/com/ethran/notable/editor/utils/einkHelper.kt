@@ -236,34 +236,32 @@ fun onSurfaceDestroy(view: View, touchHelper: TouchHelper?) {
 }
 
 
-fun setupSurface(view: View, touchHelper: TouchHelper?, toolbarHeight: Int) {
+fun setupSurface(
+    view: View,
+    touchHelper: TouchHelper?,
+    topExcludeHeight: Int = 0,
+    bottomExcludeHeight: Int = 0
+) {
     if(touchHelper == null) return
-    // Takes at least 50ms on Note 4c,
-    // and I don't think that we need it immediately
     log.i("Setup editable surface")
     touchHelper.debugLog(false)
     touchHelper.setRawDrawingEnabled(false)
     touchHelper.closeRawDrawing()
 
-    // Store view dimensions locally before using in Rect
     val viewWidth = view.width
     val viewHeight = view.height
 
-    // Determine the exclusion area based on toolbar position
-    val excludeRect: Rect =
-        if (GlobalAppSettings.current.toolbarPosition == AppSettings.Position.Top) {
-            Rect(0, 0, viewWidth, toolbarHeight)
-        } else {
-            Rect(0, viewHeight - toolbarHeight, viewWidth, viewHeight)
-        }
+    val excludeRects = mutableListOf<Rect>()
+    if (topExcludeHeight > 0) {
+        excludeRects.add(Rect(0, 0, viewWidth, topExcludeHeight))
+    }
+    if (bottomExcludeHeight > 0) {
+        excludeRects.add(Rect(0, viewHeight - bottomExcludeHeight, viewWidth, viewHeight))
+    }
 
-    val limitRect =
-        if (GlobalAppSettings.current.toolbarPosition == AppSettings.Position.Top)
-            Rect(0, toolbarHeight, viewWidth, viewHeight)
-        else
-            Rect(0, 0, viewWidth, viewHeight - toolbarHeight)
+    val limitRect = Rect(0, topExcludeHeight, viewWidth, viewHeight - bottomExcludeHeight)
 
-    touchHelper.setLimitRect(mutableListOf(limitRect)).setExcludeRect(listOf(excludeRect))
+    touchHelper.setLimitRect(mutableListOf(limitRect)).setExcludeRect(excludeRects)
         .openRawDrawing()
 
     touchHelper.setRawDrawingEnabled(true)

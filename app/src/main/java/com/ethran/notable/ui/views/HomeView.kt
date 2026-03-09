@@ -60,6 +60,7 @@ import com.ethran.notable.ui.SnackConf
 import com.ethran.notable.ui.SnackState
 import com.ethran.notable.ui.components.BreadCrumb
 import com.ethran.notable.ui.components.NotebookCard
+import com.ethran.notable.ui.components.PagePreview
 import com.ethran.notable.ui.components.ShowPagesRow
 import com.ethran.notable.ui.dialogs.EmptyBookWarningHandler
 import com.ethran.notable.ui.dialogs.FolderConfigDialog
@@ -141,68 +142,97 @@ fun LibraryContent(
     onImportXopp: (Uri) -> Unit
 ) {
     Column(Modifier.fillMaxSize()) {
-        Topbar {
-            Row(Modifier.fillMaxWidth()) {
-                Spacer(modifier = Modifier.weight(1f))
-                BadgedBox(
-                    badge = {
-                        if (!uiState.isLatestVersion) Badge(
-                            backgroundColor = Color.Black,
-                            modifier = Modifier.offset((-12).dp, 10.dp)
+        // Slim header
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Notable",
+                style = androidx.compose.material.MaterialTheme.typography.h5,
+                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+            )
+            BadgedBox(
+                badge = {
+                    if (!uiState.isLatestVersion) Badge(
+                        backgroundColor = Color.Black,
+                        modifier = Modifier.offset((-12).dp, 10.dp)
+                    )
+                }) {
+                Icon(
+                    imageVector = FeatherIcons.Settings, contentDescription = "Settings",
+                    Modifier
+                        .padding(8.dp)
+                        .noRippleClickable(onClick = onNavigateToSettings)
+                )
+            }
+        }
+
+        // Page grid
+        val pages = uiState.singlePages?.reversed() ?: emptyList()
+        LazyVerticalGrid(
+            columns = GridCells.Adaptive(140.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            modifier = Modifier
+                .padding(horizontal = 16.dp)
+                .autoEInkAnimationOnScroll()
+        ) {
+            // New capture card
+            item {
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .aspectRatio(3f / 4f)
+                        .border(2.dp, Color.Black, RectangleShape)
+                        .noRippleClickable(onClick = onCreateNewQuickPage)
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = FeatherIcons.FilePlus,
+                            contentDescription = "New Capture",
+                            tint = Color.Black,
+                            modifier = Modifier.size(48.dp)
                         )
-                    }) {
-                    Icon(
-                        imageVector = FeatherIcons.Settings, contentDescription = "Settings",
-                        Modifier
-                            .padding(8.dp)
-                            .noRippleClickable(onClick = onNavigateToSettings)
+                        Text(
+                            "New Capture",
+                            style = androidx.compose.material.MaterialTheme.typography.body2,
+                            color = Color.DarkGray
+                        )
+                    }
+                }
+            }
+
+            // Existing pages
+            items(pages) { page ->
+                var isPageSelected by remember { mutableStateOf(false) }
+                Box {
+                    PagePreview(
+                        modifier = Modifier
+                            .combinedClickable(
+                                onClick = { goToPage(page.id) },
+                                onLongClick = { isPageSelected = true }
+                            )
+                            .aspectRatio(3f / 4f)
+                            .border(1.dp, Color.Gray, RectangleShape),
+                        pageId = page.id
+                    )
+                    if (isPageSelected) com.ethran.notable.editor.ui.PageMenu(
+                        appRepository = appRepository,
+                        pageId = page.id,
+                        canDelete = true,
+                        onClose = { isPageSelected = false }
                     )
                 }
             }
-            Row(Modifier.padding(10.dp)) {
-                BreadCrumb(
-                    folders = uiState.breadcrumbFolders, onSelectFolderId = onNavigateToFolder
-                )
-            }
-
-        }
-
-        Column(Modifier.padding(10.dp)) {
-            Spacer(Modifier.height(10.dp))
-
-            FolderList(
-                appRepository = appRepository,
-                folders = uiState.folders,
-                onNavigateToFolder = onNavigateToFolder,
-                onCreateNewFolder = onCreateNewFolder
-            )
-
-            Spacer(Modifier.height(10.dp))
-            ShowPagesRow(
-                appRepository = appRepository,
-                pages = uiState.singlePages,
-                currentPageId = null,
-                title = stringResource(R.string.home_quick_pages), onSelectPage = goToPage,
-                showAddQuickPage = true, onCreateNewQuickPage = onCreateNewQuickPage
-            )
-
-            Spacer(Modifier.height(10.dp))
-
-            NotebookGrid(
-                appRepository = appRepository,
-                exportEngine = exportEngine,
-                books = uiState.books,
-                isImporting = uiState.isImporting,
-                onNavigateToEditor = onNavigateToEditor,
-                onDeleteEmptyBook = onDeleteEmptyBook,
-                onCreateNewNotebook = onCreateNewNotebook,
-                onImportPdf = onImportPdf,
-                onImportXopp = onImportXopp
-            )
         }
     }
-
-
 }
 
 @Composable

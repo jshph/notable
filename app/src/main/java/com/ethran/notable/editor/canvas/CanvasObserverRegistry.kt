@@ -214,6 +214,14 @@ class CanvasObserverRegistry(
                 refreshManager.refreshUi(null)
             }
         }
+        coroutineScope.launch {
+            snapshotFlow { state.isInboxTagsExpanded }.drop(1).collect {
+                logCanvasObserver.v("inbox tags expanded change: ${state.isInboxTagsExpanded}")
+                inputHandler.updateActiveSurface()
+                inputHandler.updatePenAndStroke()
+                refreshManager.refreshUi(null)
+            }
+        }
     }
 
     private fun observeMode() {

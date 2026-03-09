@@ -89,7 +89,7 @@ class EditorState(
     private val log = ShipBook.getLogger("EditorState")
 
     var mode by mutableStateOf(persistedEditorSettings?.mode ?: Mode.Draw) // should save
-    var pen by mutableStateOf(persistedEditorSettings?.pen ?: Pen.BALLPEN) // should save
+    var pen by mutableStateOf(persistedEditorSettings?.pen ?: Pen.FOUNTAIN) // should save
     var eraser by mutableStateOf(persistedEditorSettings?.eraser ?: Eraser.PEN) // should save
     var isDrawing by mutableStateOf(true) // gives information if pen touch will be drawn or not
     // For debugging:
@@ -104,6 +104,7 @@ class EditorState(
 //        }
 
     var isInboxPage by mutableStateOf(false)
+    var isInboxTagsExpanded by mutableStateOf(false)
 
     var isToolbarOpen by mutableStateOf(
         persistedEditorSettings?.isToolbarOpen ?: false

@@ -63,7 +63,8 @@ object InboxSyncEngine {
         val contentText = if (strokes.isNotEmpty()) {
             ensureModelDownloaded()
             log.i("Recognizing ${strokes.size} content strokes")
-            recognizeStrokes(strokes)
+            val raw = recognizeStrokes(strokes)
+            postProcessRecognition(raw)
         } else ""
 
         log.i("Recognized content: '${contentText.take(100)}'")
@@ -135,6 +136,28 @@ object InboxSyncEngine {
                 }
                 .addOnFailureListener { cont.resumeWithException(it) }
         }
+    }
+
+    /**
+     * Post-process ML Kit recognition output:
+     * - Normalize any bracket/paren wrapping to [[wiki links]]
+     * - Collapse space between # and the following word into a proper #tag
+     */
+    private fun postProcessRecognition(text: String): String {
+        var result = text
+
+        // Normalize bracket/paren wrapping to [[wiki links]]
+        // Handles: [text], ((text)), ([text]), [(text)], [[text]], etc.
+        result = result.replace(Regex("""[(\[]{1,2}([^)\]\n]+?)[)\]]{1,2}""")) { match ->
+            "[[${match.groupValues[1].trim()}]]"
+        }
+
+        // Collapse space between # and the word following it
+        result = result.replace(Regex("""#\s+(\w+)""")) { match ->
+            "#${match.groupValues[1]}"
+        }
+
+        return result
     }
 
     private fun generateMarkdown(

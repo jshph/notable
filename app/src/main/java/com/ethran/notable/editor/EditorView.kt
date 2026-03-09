@@ -1,11 +1,18 @@
 package com.ethran.notable.editor
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.material.Text
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.sp
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -226,6 +233,10 @@ fun EditorView(
                 InboxToolbar(
                     selectedTags = selectedTags,
                     suggestedTags = suggestedTags,
+                    isExpanded = editorState.isInboxTagsExpanded,
+                    onToggleExpanded = {
+                        editorState.isInboxTagsExpanded = !editorState.isInboxTagsExpanded
+                    },
                     onTagAdd = { tag ->
                         if (tag !in selectedTags) selectedTags.add(tag)
                     },
@@ -269,6 +280,22 @@ fun EditorView(
                 PositionedToolbar(exportEngine, navController, appRepository, editorState, editorControlTower)
             }
             HorizontalScrollIndicator(state = editorState)
+
+            // Full-screen overlay while inbox sync is in progress
+            if (isSyncing) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.White),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "Saving to vault...",
+                        fontSize = 24.sp,
+                        color = Color.Black
+                    )
+                }
+            }
         }
     }
 }

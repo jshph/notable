@@ -39,21 +39,11 @@ fun GeneralSettings(
     settings: AppSettings, onSettingsChange: (AppSettings) -> Unit
 ) {
     Column {
-        // Inbox Capture section
+        // Capture settings
         InboxCaptureSettings(settings, onSettingsChange)
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        SelectorRow(
-            label = stringResource(R.string.default_page_background_template), options = listOf(
-                "blank" to stringResource(R.string.blank_page),
-                "dotted" to stringResource(R.string.dot_grid),
-                "lined" to stringResource(R.string.lines),
-                "squared" to stringResource(R.string.small_squares_grid),
-                "hexed" to stringResource(R.string.hexagon_grid),
-            ), value = settings.defaultNativeTemplate, onValueChange = {
-                onSettingsChange(settings.copy(defaultNativeTemplate = it))
-            })
         SelectorRow(
             label = stringResource(R.string.toolbar_position), options = listOf(
                 AppSettings.Position.Top to stringResource(R.string.toolbar_position_top),
@@ -135,7 +125,7 @@ private fun InboxCaptureSettings(
             .padding(16.dp)
     ) {
         Text(
-            "Inbox Capture",
+            "Capture",
             style = MaterialTheme.typography.h6,
             fontWeight = FontWeight.Bold
         )
@@ -143,8 +133,8 @@ private fun InboxCaptureSettings(
         Spacer(modifier = Modifier.height(4.dp))
 
         Text(
-            "Handwritten notes are recognized and saved as markdown to this folder. " +
-                    "Tags are also loaded from existing notes in this folder.",
+            "Handwritten captures are recognized and saved as markdown to your Obsidian vault. " +
+                    "Tags are loaded from existing notes in this folder.",
             style = MaterialTheme.typography.body2,
             color = Color.Gray
         )
@@ -152,7 +142,7 @@ private fun InboxCaptureSettings(
         Spacer(modifier = Modifier.height(12.dp))
 
         Text(
-            "Inbox folder path",
+            "Vault inbox folder",
             style = MaterialTheme.typography.body1,
             fontWeight = FontWeight.Medium
         )
