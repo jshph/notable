@@ -103,6 +103,7 @@ fun SettingsView(
             viewModel.checkUpdate(context, force)
         },
         onUpdateSettings = { viewModel.updateSettings(it) },
+        onClearAllPages = { onComplete -> viewModel.clearAllPages(onComplete) },
         listOfGestures = viewModel.getGestureRows(),
         availableGestures = viewModel.availableGestures
     )
@@ -119,6 +120,7 @@ fun SettingsContent(
     goToInkTest: () -> Unit = {},
     onCheckUpdate: (Boolean) -> Unit,
     onUpdateSettings: (AppSettings) -> Unit,
+    onClearAllPages: ((onComplete: () -> Unit) -> Unit)? = null,
     selectedTabInitial: Int = 0,
     listOfGestures: List<GestureRowModel> = emptyList(),
     availableGestures: List<Pair<AppSettings.GestureAction?, Any>> = emptyList()
@@ -151,7 +153,7 @@ fun SettingsContent(
                     .verticalScroll(rememberScrollState())
             ) {
                 when (selectedTab) {
-                    0 -> GeneralSettings(settings, onUpdateSettings)
+                    0 -> GeneralSettings(settings, onUpdateSettings, onClearAllPages)
                     1 -> GesturesSettings(
                         settings, onUpdateSettings, listOfGestures, availableGestures
                     )

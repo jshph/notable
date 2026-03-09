@@ -1,6 +1,9 @@
 package com.ethran.notable.ui.components
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -36,7 +39,9 @@ import com.ethran.notable.io.VaultTagScanner
 
 @Composable
 fun GeneralSettings(
-    settings: AppSettings, onSettingsChange: (AppSettings) -> Unit
+    settings: AppSettings,
+    onSettingsChange: (AppSettings) -> Unit,
+    onClearAllPages: ((onComplete: () -> Unit) -> Unit)? = null
 ) {
     Column {
         // Capture settings
@@ -107,6 +112,69 @@ fun GeneralSettings(
             onToggle = { isChecked ->
                 onSettingsChange(settings.copy(visualizePdfPagination = isChecked))
             })
+
+        if (onClearAllPages != null) {
+            Spacer(modifier = Modifier.height(16.dp))
+            ClearAllPagesButton(onClearAllPages)
+        }
+    }
+}
+
+@Composable
+private fun ClearAllPagesButton(onClearAllPages: (onComplete: () -> Unit) -> Unit) {
+    var confirmState by remember { mutableStateOf(false) }
+    var isClearing by remember { mutableStateOf(false) }
+
+    if (isClearing) {
+        Text(
+            "Clearing...",
+            style = MaterialTheme.typography.body1,
+            color = Color.Gray,
+            modifier = Modifier.padding(vertical = 12.dp)
+        )
+    } else if (confirmState) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                "Delete all pages, notebooks, and folders?",
+                style = MaterialTheme.typography.body1,
+                modifier = Modifier.weight(1f)
+            )
+            Box(
+                modifier = Modifier
+                    .background(Color.Black, RoundedCornerShape(6.dp))
+                    .clickable {
+                        isClearing = true
+                        onClearAllPages {
+                            isClearing = false
+                            confirmState = false
+                        }
+                    }
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
+            ) {
+                Text("Yes, delete all", color = Color.White, fontSize = 14.sp)
+            }
+            Spacer(modifier = Modifier.padding(horizontal = 4.dp))
+            Box(
+                modifier = Modifier
+                    .border(1.dp, Color.Gray, RoundedCornerShape(6.dp))
+                    .clickable { confirmState = false }
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
+            ) {
+                Text("Cancel", fontSize = 14.sp)
+            }
+        }
+    } else {
+        Box(
+            modifier = Modifier
+                .border(1.dp, Color.Red, RoundedCornerShape(6.dp))
+                .clickable { confirmState = true }
+                .padding(horizontal = 16.dp, vertical = 10.dp)
+        ) {
+            Text("Clear all pages", color = Color.Red, fontSize = 14.sp)
+        }
     }
 }
 

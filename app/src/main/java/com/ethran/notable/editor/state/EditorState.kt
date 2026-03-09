@@ -1,6 +1,5 @@
 package com.ethran.notable.editor.state
 
-import android.graphics.Color
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -88,39 +87,16 @@ class EditorState(
 
     private val log = ShipBook.getLogger("EditorState")
 
-    var mode by mutableStateOf(persistedEditorSettings?.mode ?: Mode.Draw) // should save
-    var pen by mutableStateOf(persistedEditorSettings?.pen ?: Pen.FOUNTAIN) // should save
-    var eraser by mutableStateOf(persistedEditorSettings?.eraser ?: Eraser.PEN) // should save
-    var isDrawing by mutableStateOf(true) // gives information if pen touch will be drawn or not
-    // For debugging:
-//    var isDrawing: Boolean
-//        get() = _isDrawing
-//        set(value) {
-//            if (_isDrawing != value) {
-//                Log.d(TAG, "isDrawing modified from ${_isDrawing} to $value")
-//                logCallStack("isDrawing modification")
-//                _isDrawing = value
-//            }
-//        }
+    var mode by mutableStateOf(persistedEditorSettings?.mode ?: Mode.Draw)
+    var pen by mutableStateOf(persistedEditorSettings?.pen ?: Pen.DEFAULT)
+    var eraser by mutableStateOf(persistedEditorSettings?.eraser ?: Eraser.PEN)
+    var isDrawing by mutableStateOf(true)
 
     var isInboxPage by mutableStateOf(false)
     var isInboxTagsExpanded by mutableStateOf(false)
 
-    var isToolbarOpen by mutableStateOf(
-        persistedEditorSettings?.isToolbarOpen ?: false
-    ) // should save
-    var penSettings by mutableStateOf(
-        persistedEditorSettings?.penSettings ?: mapOf(
-            Pen.BALLPEN.penName to PenSetting(5f, Color.BLACK),
-            Pen.REDBALLPEN.penName to PenSetting(5f, Color.RED),
-            Pen.BLUEBALLPEN.penName to PenSetting(5f, Color.BLUE),
-            Pen.GREENBALLPEN.penName to PenSetting(5f, Color.GREEN),
-            Pen.PENCIL.penName to PenSetting(5f, Color.BLACK),
-            Pen.BRUSH.penName to PenSetting(5f, Color.BLACK),
-            Pen.MARKER.penName to PenSetting(40f, Color.LTGRAY),
-            Pen.FOUNTAIN.penName to PenSetting(5f, Color.BLACK)
-        )
-    )
+    var isToolbarOpen by mutableStateOf(persistedEditorSettings?.isToolbarOpen ?: false)
+    var penSettings by mutableStateOf(persistedEditorSettings?.penSettings ?: Pen.DEFAULT_SETTINGS)
 
     val selectionState = SelectionState()
 

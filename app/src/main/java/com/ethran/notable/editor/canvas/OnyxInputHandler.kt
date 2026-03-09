@@ -27,7 +27,6 @@ import com.ethran.notable.editor.utils.handleScribbleToErase
 import com.ethran.notable.editor.utils.handleSelect
 import com.ethran.notable.editor.utils.onSurfaceInit
 import com.ethran.notable.editor.utils.partialRefreshRegionOnce
-import com.ethran.notable.editor.utils.penToStroke
 import com.ethran.notable.editor.utils.prepareForPartialUpdate
 import com.ethran.notable.editor.utils.restoreDefaults
 import com.ethran.notable.editor.utils.setupSurface
@@ -130,36 +129,33 @@ class OnyxInputHandler(
 
     fun updatePenAndStroke() {
         if(touchHelper == null) return
-        // it takes around 11 ms to run on Note 4c.
-        log.i("Update pen and stroke")
+        log.i("Update pen and stroke: pen=${state.pen}, mode=${state.mode}")
         when (state.mode) {
-            // we need to change size according to zoom level before drawing on screen
-            Mode.Draw, Mode.Line -> touchHelper!!.setStrokeStyle(penToStroke(state.pen))
-                ?.setStrokeWidth(state.penSettings[state.pen.penName]!!.strokeSize * page.zoomLevel.value)
-                ?.setStrokeColor(state.penSettings[state.pen.penName]!!.color)
+            Mode.Draw, Mode.Line -> {
+                val setting = state.penSettings[state.pen.penName] ?: return
+                touchHelper!!.setStrokeStyle(state.pen.strokeStyle)
+                    ?.setStrokeWidth(setting.strokeSize * page.zoomLevel.value)
+                    ?.setStrokeColor(setting.color)
+            }
 
-            Mode.Erase -> {
-                when (state.eraser) {
-                    Eraser.PEN -> touchHelper!!.setStrokeStyle(penToStroke(Pen.MARKER))
-                        ?.setStrokeWidth(30f)
-                        ?.setStrokeColor(Color.GRAY)
+            Mode.Erase -> when (state.eraser) {
+                Eraser.PEN -> touchHelper!!.setStrokeStyle(Pen.MARKER.strokeStyle)
+                    ?.setStrokeWidth(30f)
+                    ?.setStrokeColor(Color.GRAY)
 
-                    Eraser.SELECT -> {
-                        val dashStyleID = penToStroke(Pen.DASHED)
-                        touchHelper!!.setStrokeStyle(dashStyleID)
-                            ?.setStrokeWidth(3f)
-                            ?.setStrokeColor(Color.BLACK)
-                        val params = FloatArray(4)
-                        params[0] = 5f // thickness
-                        params[1] = 9f // no idea
-                        params[2] = 9f // no idea
-                        params[3] = 0f // no idea
-                        Device.currentDevice().setStrokeParameters(dashStyleID, params)
-                    }
+                Eraser.SELECT -> {
+                    touchHelper!!.setStrokeStyle(Pen.DASHED.strokeStyle)
+                        ?.setStrokeWidth(3f)
+                        ?.setStrokeColor(Color.BLACK)
+                    Device.currentDevice().setStrokeParameters(
+                        Pen.DASHED.strokeStyle,
+                        floatArrayOf(5f, 9f, 9f, 0f)
+                    )
                 }
             }
 
-            Mode.Select -> touchHelper?.setStrokeStyle(penToStroke(Pen.BALLPEN))?.setStrokeWidth(3f)
+            Mode.Select -> touchHelper?.setStrokeStyle(Pen.BALLPEN.strokeStyle)
+                ?.setStrokeWidth(3f)
                 ?.setStrokeColor(Color.GRAY)
         }
     }
@@ -182,32 +178,33 @@ class OnyxInputHandler(
         log.i("Update editable surface")
         coroutineScope.launch {
             onSurfaceInit(drawCanvas)
-            if (state.isInboxPage) {
-                val inboxToolbarHeight = if (state.isInboxTagsExpanded) {
-                    convertDpToPixel(INBOX_TOOLBAR_EXPANDED_HEIGHT, drawCanvas.context).toInt()
-                } else {
-                    convertDpToPixel(INBOX_TOOLBAR_COLLAPSED_HEIGHT, drawCanvas.context).toInt()
-                }
-                val penToolbarHeight = convertDpToPixel(40.dp, drawCanvas.context).toInt()
-                setupSurface(
-                    drawCanvas,
-                    touchHelper,
-                    topExcludeHeight = inboxToolbarHeight,
-                    bottomExcludeHeight = penToolbarHeight
-                )
+
+            val (topExclude, bottomExclude) = calculateExcludeHeights()
+            setupSurface(drawCanvas, touchHelper, topExclude, bottomExclude)
+
+            // Must set pen/stroke AFTER setupSurface, because openRawDrawing() resets the stroke style
+            updatePenAndStroke()
+        }
+    }
+
+    private fun calculateExcludeHeights(): Pair<Int, Int> {
+        if (state.isInboxPage) {
+            val toolbarHeight = if (state.isInboxTagsExpanded) {
+                convertDpToPixel(INBOX_TOOLBAR_EXPANDED_HEIGHT, drawCanvas.context).toInt()
             } else {
-                val toolbarHeight = if (state.isToolbarOpen) {
-                    convertDpToPixel(40.dp, drawCanvas.context).toInt()
-                } else 0
-                val topExclude = if (GlobalAppSettings.current.toolbarPosition == AppSettings.Position.Top) toolbarHeight else 0
-                val bottomExclude = if (GlobalAppSettings.current.toolbarPosition == AppSettings.Position.Bottom) toolbarHeight else 0
-                setupSurface(
-                    drawCanvas,
-                    touchHelper,
-                    topExcludeHeight = topExclude,
-                    bottomExcludeHeight = bottomExclude
-                )
+                convertDpToPixel(INBOX_TOOLBAR_COLLAPSED_HEIGHT, drawCanvas.context).toInt()
             }
+            val penToolbarHeight = convertDpToPixel(40.dp, drawCanvas.context).toInt()
+            return toolbarHeight to penToolbarHeight
+        }
+
+        val toolbarHeight = if (state.isToolbarOpen) {
+            convertDpToPixel(40.dp, drawCanvas.context).toInt()
+        } else 0
+
+        return when (GlobalAppSettings.current.toolbarPosition) {
+            AppSettings.Position.Top -> toolbarHeight to 0
+            AppSettings.Position.Bottom -> 0 to toolbarHeight
         }
     }
     private fun onRawDrawingList(plist: TouchPointList) {

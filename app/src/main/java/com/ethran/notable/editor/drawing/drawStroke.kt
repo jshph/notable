@@ -40,15 +40,7 @@ fun drawStroke(canvas: Canvas, stroke: Stroke, offset: Offset) {
             Pen.GREENBALLPEN -> drawBallPenStroke(canvas, paint, stroke.size, points)
             Pen.BLUEBALLPEN -> drawBallPenStroke(canvas, paint, stroke.size, points)
 
-            Pen.FOUNTAIN -> {
-                NeoFountainPenV2Wrapper.drawStroke(
-                    /* canvas = */ canvas,
-                    /* paint = */ paint,
-                    /* points = */ points,
-                    /* strokeWidth = */ stroke.size,
-                    /* maxTouchPressure = */ stroke.maxPressure.toFloat(),
-                )
-            }
+            Pen.FOUNTAIN -> drawFountainPenStroke(canvas, paint, stroke.size, points)
 
             Pen.BRUSH -> {
                 NeoBrushPenWrapper.drawStroke(

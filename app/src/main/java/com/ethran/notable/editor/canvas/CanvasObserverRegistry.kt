@@ -209,8 +209,8 @@ class CanvasObserverRegistry(
         coroutineScope.launch {
             snapshotFlow { state.isToolbarOpen }.drop(1).collect {
                 logCanvasObserver.v("istoolbaropen change: ${state.isToolbarOpen}")
+                // updateActiveSurface reconfigures exclude rects and restores pen/stroke style
                 inputHandler.updateActiveSurface()
-                inputHandler.updatePenAndStroke()
                 refreshManager.refreshUi(null)
             }
         }
@@ -218,7 +218,6 @@ class CanvasObserverRegistry(
             snapshotFlow { state.isInboxTagsExpanded }.drop(1).collect {
                 logCanvasObserver.v("inbox tags expanded change: ${state.isInboxTagsExpanded}")
                 inputHandler.updateActiveSurface()
-                inputHandler.updatePenAndStroke()
                 refreshManager.refreshUi(null)
             }
         }
