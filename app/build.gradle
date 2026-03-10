@@ -50,7 +50,7 @@ android {
                 v1SigningEnabled true
                 v2SigningEnabled true
             } else {
-                println "Running locally, skipping release signing..."
+                logger.info "Running locally, skipping release signing..."
             }
         }
         release {
@@ -63,7 +63,7 @@ android {
                 v1SigningEnabled true
                 v2SigningEnabled true
             } else {
-                println "Running locally, skipping release signing..."
+                logger.info "Running locally, skipping release signing..."
             }
         }
 
@@ -227,5 +227,7 @@ dependencies {
 }
 
 tasks.register('printVersionName') {
-    println android.defaultConfig.versionName
+    doLast {
+        println android.defaultConfig.versionName
+    }
 }
