@@ -1,6 +1,19 @@
+<div align="center">
+
 # Notable for Obsidian
 
-A handwriting capture surface for [Obsidian](https://obsidian.md), built for [Onyx Boox](https://www.boox.com/) e-ink tablets.
+**Handwriting → Markdown → Knowledge**
+
+A capture surface for [Obsidian](https://obsidian.md) on [Onyx Boox](https://www.boox.com/) e-ink tablets.
+Write with a pen. Tag with your vault's vocabulary. Sync as markdown.
+
+[![Kotlin](https://img.shields.io/badge/Kotlin-2.3-7F52FF?logo=kotlin&logoColor=white)](https://kotlinlang.org)
+[![Jetpack Compose](https://img.shields.io/badge/Jetpack_Compose-Material-4285F4?logo=jetpackcompose&logoColor=white)](https://developer.android.com/jetpack/compose)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
+
+</div>
+
+---
 
 Fork of [Ethran/notable](https://github.com/Ethran/notable). The upstream project is a general-purpose note-taking app for Boox devices. This fork strips it down to a single purpose: **capture handwritten thoughts and sync them into your Obsidian vault as markdown**.
 
@@ -114,6 +127,20 @@ This fork keeps the core Notable functionality that matters for capture:
 - Zoom and pan
 
 Features removed from the UI: notebooks, folders, import/export, background templates, PDF annotation.
+
+---
+
+## If you're into knowledge curation
+
+This project is about getting handwritten thoughts into Obsidian. If you're looking for tools that help you *rediscover* those thoughts once they're there:
+
+### [Enzyme](https://enzyme.garden) · [GitHub](https://github.com/jshph/enzyme)
+
+An AI layer for Obsidian that surfaces connections between your notes — the ones you forgot you made. Semantic search over your vault, concept-level linking, and pattern discovery across everything you've written. < 40 MB bundle, 10x faster initialization than QMD. Lightweight enough to run alongside your vault without friction.
+
+### [Aside](https://github.com/jshph/aside)
+
+Local-first meeting memos with timestamp-synced transcription. Record a conversation, get a structured note aligned to your audio timeline. Everything stays on your machine.
 
 ---
 
