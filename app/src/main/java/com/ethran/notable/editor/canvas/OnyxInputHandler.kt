@@ -14,6 +14,7 @@ import com.ethran.notable.editor.ui.INBOX_TOOLBAR_EXPANDED_HEIGHT
 import com.ethran.notable.editor.state.EditorState
 import com.ethran.notable.editor.state.History
 import com.ethran.notable.editor.state.Mode
+import com.ethran.notable.editor.state.Operation
 import com.ethran.notable.editor.utils.DeviceCompat
 import com.ethran.notable.editor.utils.Eraser
 import com.ethran.notable.editor.utils.Pen
@@ -330,11 +331,16 @@ class OnyxInputHandler(
                         if (erasedByScribbleDirtyRect.isNullOrEmpty()) {
                             if (annotMode != AnnotationMode.None) {
                                 log.d("Creating annotation...")
-                                handleAnnotation(
+                                val annotationId = handleAnnotation(
                                     drawCanvas.page,
                                     annotMode,
                                     scaledPoints
                                 )
+                                if (annotationId != null) {
+                                    history.addOperationsToHistory(
+                                        listOf(Operation.DeleteAnnotation(listOf(annotationId)))
+                                    )
+                                }
                                 // Reset to one-shot: annotation mode turns off after one box
                                 drawCanvas.getActualState().annotationMode = AnnotationMode.None
                                 // Redraw canvas, then do a full GC refresh to clear

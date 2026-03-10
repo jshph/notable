@@ -27,6 +27,7 @@ import com.ethran.notable.data.db.Stroke
 import com.ethran.notable.data.db.getBackgroundType
 import com.ethran.notable.data.model.BackgroundType
 import com.ethran.notable.editor.canvas.CanvasEventBus
+import com.ethran.notable.editor.drawing.annotationVisualBounds
 import com.ethran.notable.editor.drawing.drawBg
 import com.ethran.notable.editor.drawing.drawOnCanvasFromPage
 import com.ethran.notable.editor.utils.div
@@ -491,7 +492,23 @@ class PageView(
         ignoredImageIds: List<String> = listOf(),
         canvas: Canvas? = null
     ) {
-        val areaInScreen = toScreenCoordinates(pageArea)
+        // Expand the redraw area to include the full visual extent of any
+        // annotations whose glyphs (brackets, hash) overlap with pageArea.
+        // Without this, partial redraws clip away glyph parts that extend
+        // beyond the annotation's data bounds.
+        var expanded = pageArea
+        annotations.forEach { annotation ->
+            val visualBounds = annotationVisualBounds(annotation)
+            if (Rect.intersects(visualBounds, pageArea)) {
+                expanded = Rect(
+                    min(expanded.left, visualBounds.left),
+                    min(expanded.top, visualBounds.top),
+                    max(expanded.right, visualBounds.right),
+                    max(expanded.bottom, visualBounds.bottom)
+                )
+            }
+        }
+        val areaInScreen = toScreenCoordinates(expanded)
         drawAreaScreenCoordinates(areaInScreen, ignoredStrokeIds, ignoredImageIds, canvas)
     }
 

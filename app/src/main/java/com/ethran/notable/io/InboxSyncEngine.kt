@@ -58,48 +58,74 @@ object InboxSyncEngine {
         log.i("Full recognized text: '${fullText.take(200)}'")
 
         // 2. Find annotation text by diffing full recognition vs non-annotation recognition.
-        //    This is more reliable than recognizing annotation strokes alone (fewer strokes =
-        //    less context = worse HWR accuracy).
+        //    Falls back to per-annotation recognition if the diff produces a count mismatch
+        //    (which happens when removing strokes changes HWR context enough to alter other words).
         if (serviceReady && annotations.isNotEmpty()) {
+            val sortedAnnotations = annotations.sortedWith(compareBy({ it.y }, { it.x }))
+
             // Collect stroke IDs that fall inside any annotation box
             val annotationStrokeIds = mutableSetOf<String>()
-            for (annotation in annotations) {
+            val annotationStrokeMap = mutableMapOf<String, List<Stroke>>()
+            for (annotation in sortedAnnotations) {
                 val annotRect = RectF(
                     annotation.x, annotation.y,
                     annotation.x + annotation.width,
                     annotation.y + annotation.height
                 )
-                findStrokesInRect(allStrokes, annotRect).forEach { annotationStrokeIds.add(it.id) }
+                val overlapping = findStrokesInRect(allStrokes, annotRect)
+                annotationStrokeMap[annotation.id] = overlapping
+                overlapping.forEach { annotationStrokeIds.add(it.id) }
             }
 
-            // Recognize non-annotation strokes to get "base text"
+            // Try diff-based approach first (better accuracy when it works)
+            var diffSucceeded = false
             val nonAnnotStrokes = allStrokes.filter { it.id !in annotationStrokeIds }
-            val baseText = if (nonAnnotStrokes.isNotEmpty()) {
-                postProcessRecognition(recognizeStrokesSafe(nonAnnotStrokes))
-            } else ""
-            log.i("Base text (without annotations): '${baseText.take(200)}'")
+            if (nonAnnotStrokes.isNotEmpty()) {
+                val baseText = postProcessRecognition(recognizeStrokesSafe(nonAnnotStrokes))
+                log.i("Base text (without annotations): '${baseText.take(200)}'")
 
-            // Diff to find word segments in full text that are missing from base text.
-            // These are the annotation-contributed words, in reading order.
-            val annotationTexts = diffWords(baseText, fullText)
-            log.i("Diffed annotation texts: $annotationTexts")
+                val annotationTexts = diffWords(baseText, fullText)
+                log.i("Diffed annotation texts: $annotationTexts")
 
-            // Sort annotations by position (top-to-bottom, left-to-right) to match diff order
-            val sortedAnnotations = annotations.sortedWith(compareBy({ it.y }, { it.x }))
-
-            if (annotationTexts.size != sortedAnnotations.size) {
-                log.w("Diff found ${annotationTexts.size} segments but have ${sortedAnnotations.size} annotations — skipping wrapping")
-            } else {
-                for ((i, annotation) in sortedAnnotations.withIndex()) {
-                    val annotText = annotationTexts[i]
-                    if (annotText.isBlank()) continue
-                    log.i("Annotation ${annotation.type}: '$annotText'")
-                    val wrapped = when (annotation.type) {
-                        AnnotationType.WIKILINK.name -> "[[${annotText}]]"
-                        AnnotationType.TAG.name -> "#${annotText.replace(" ", "-")}"
-                        else -> annotText
+                if (annotationTexts.size == sortedAnnotations.size) {
+                    diffSucceeded = true
+                    for ((i, annotation) in sortedAnnotations.withIndex()) {
+                        val annotText = annotationTexts[i]
+                        if (annotText.isBlank()) continue
+                        log.i("Annotation ${annotation.type} (diff): '$annotText'")
+                        // Strip trailing punctuation so it stays outside the markup
+                        val cleaned = annotText.trimEnd('.', ',', ';', ':', '!', '?')
+                        val trailing = annotText.removePrefix(cleaned)
+                        val wrapped = wrapAnnotationText(annotation, cleaned) + trailing
+                        fullText = fullText.replaceFirst(annotText, wrapped)
                     }
-                    fullText = fullText.replaceFirst(annotText, wrapped)
+                } else {
+                    log.w("Diff found ${annotationTexts.size} segments but have ${sortedAnnotations.size} annotations — falling back to per-annotation recognition")
+                }
+            }
+
+            // Fallback: recognize each annotation's strokes individually
+            if (!diffSucceeded) {
+                for (annotation in sortedAnnotations) {
+                    val overlapping = annotationStrokeMap[annotation.id] ?: continue
+                    if (overlapping.isEmpty()) continue
+                    val rawAnnotText = recognizeStrokesSafe(overlapping).trim()
+                    if (rawAnnotText.isBlank()) continue
+                    log.i("Annotation ${annotation.type} (fallback raw): '$rawAnnotText'")
+
+                    // Per-annotation HWR can be noisy — find the best matching
+                    // substring in fullText, trying the full text first, then
+                    // individual words from longest to shortest
+                    val matchText = findBestMatch(rawAnnotText, fullText)
+                    if (matchText != null) {
+                        log.i("Annotation ${annotation.type} (fallback matched): '$matchText'")
+                        val cleaned = matchText.trimEnd('.', ',', ';', ':', '!', '?')
+                        val trailing = matchText.removePrefix(cleaned)
+                        val wrapped = wrapAnnotationText(annotation, cleaned) + trailing
+                        fullText = fullText.replaceFirst(matchText, wrapped)
+                    } else {
+                        log.w("Annotation ${annotation.type}: could not find '$rawAnnotText' in full text")
+                    }
                 }
             }
         }
@@ -113,6 +139,31 @@ object InboxSyncEngine {
         writeMarkdownFile(markdown, page.createdAt, inboxPath)
 
         log.i("Inbox sync complete for page $pageId")
+    }
+
+    /**
+     * Find the best matching substring of [annotText] within [fullText].
+     * Tries the full recognized text first, then individual words (longest first).
+     * Returns the matching substring as it appears in fullText, or null.
+     */
+    private fun findBestMatch(annotText: String, fullText: String): String? {
+        if (fullText.contains(annotText)) return annotText
+
+        // Try individual words, longest first (longer words are more specific)
+        val words = annotText.split(Regex("\\s+")).filter { it.isNotBlank() }
+        val sorted = words.sortedByDescending { it.length }
+        for (word in sorted) {
+            if (word.length >= 2 && fullText.contains(word)) return word
+        }
+        return null
+    }
+
+    private fun wrapAnnotationText(annotation: Annotation, text: String): String {
+        return when (annotation.type) {
+            AnnotationType.WIKILINK.name -> "[[${text}]]"
+            AnnotationType.TAG.name -> "#${text.replace(" ", "-")}"
+            else -> text
+        }
     }
 
     private suspend fun recognizeStrokesSafe(strokes: List<Stroke>): String {

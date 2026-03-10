@@ -57,6 +57,41 @@ private val annotationUnderlinePaint = Paint().apply {
     isAntiAlias = true
 }
 
+/**
+ * Returns the visual bounding rect of an annotation in page coordinates,
+ * including the bracket/hash glyphs that extend beyond the annotation's data bounds.
+ */
+fun annotationVisualBounds(annotation: Annotation): Rect {
+    val boxHeight = annotation.height
+    val padding = boxHeight * 0.15f
+
+    val expandLeft: Float
+    val expandRight: Float
+
+    if (annotation.type == AnnotationType.WIKILINK.name) {
+        val bracketSize = boxHeight * 0.55f
+        wikiLinkBracketPaint.textSize = bracketSize
+        val bracketWidth = wikiLinkBracketPaint.measureText("[[")
+        val bracketGap = padding * 0.5f
+        expandLeft = bracketWidth + bracketGap
+        expandRight = bracketWidth + bracketGap
+    } else {
+        val hashSize = boxHeight * 0.65f
+        tagHashPaint.textSize = hashSize
+        val hashWidth = tagHashPaint.measureText("#")
+        val hashGap = padding * 0.6f
+        expandLeft = hashWidth + hashGap
+        expandRight = padding
+    }
+
+    return Rect(
+        (annotation.x - expandLeft).toInt(),
+        (annotation.y - padding).toInt(),
+        (annotation.x + annotation.width + expandRight).toInt(),
+        (annotation.y + annotation.height + padding).toInt()
+    )
+}
+
 fun drawAnnotation(canvas: Canvas, annotation: Annotation, offset: Offset) {
     val rect = RectF(
         annotation.x + offset.x,
@@ -278,11 +313,8 @@ fun drawOnCanvasFromPage(
         // Draw annotation overlays on top of strokes
         try {
             page.annotations.forEach { annotation ->
-                val annotRect = RectF(
-                    annotation.x, annotation.y,
-                    annotation.x + annotation.width, annotation.y + annotation.height
-                )
-                if (!annotRect.toRect().intersect(pageArea)) return@forEach
+                val visualBounds = annotationVisualBounds(annotation)
+                if (!visualBounds.intersect(pageArea)) return@forEach
                 drawAnnotation(this, annotation, -page.scroll)
             }
         } catch (e: Exception) {

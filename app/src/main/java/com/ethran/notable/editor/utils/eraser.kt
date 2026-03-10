@@ -214,20 +214,6 @@ private fun selectAnnotationsFromPath(annotations: List<Annotation>, eraserPath:
     }
 }
 
-private fun annotationBounds(annotations: List<Annotation>): Rect {
-    var left = Float.MAX_VALUE
-    var top = Float.MAX_VALUE
-    var right = Float.MIN_VALUE
-    var bottom = Float.MIN_VALUE
-    for (a in annotations) {
-        if (a.x < left) left = a.x
-        if (a.y < top) top = a.y
-        if (a.x + a.width > right) right = a.x + a.width
-        if (a.y + a.height > bottom) bottom = a.y + a.height
-    }
-    return Rect(left.toInt(), top.toInt(), right.toInt(), bottom.toInt())
-}
-
 // points is in page coordinates, returns effected area.
 fun cleanAllStrokes(
     page: PageView, history: History
