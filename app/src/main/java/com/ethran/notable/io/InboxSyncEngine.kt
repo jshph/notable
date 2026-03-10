@@ -57,28 +57,49 @@ object InboxSyncEngine {
 
         log.i("Full recognized text: '${fullText.take(200)}'")
 
-        // 2. For each annotation, recognize its strokes separately to get the annotation text,
-        //    then find and replace that text inline with the wrapped version
+        // 2. Find annotation text by diffing full recognition vs non-annotation recognition.
+        //    This is more reliable than recognizing annotation strokes alone (fewer strokes =
+        //    less context = worse HWR accuracy).
         if (serviceReady && annotations.isNotEmpty()) {
+            // Collect stroke IDs that fall inside any annotation box
+            val annotationStrokeIds = mutableSetOf<String>()
             for (annotation in annotations) {
                 val annotRect = RectF(
                     annotation.x, annotation.y,
                     annotation.x + annotation.width,
                     annotation.y + annotation.height
                 )
-                val overlapping = findStrokesInRect(allStrokes, annotRect)
-                if (overlapping.isNotEmpty()) {
-                    val annotText = recognizeStrokesSafe(overlapping).trim()
-                    if (annotText.isNotBlank()) {
-                        log.i("Annotation ${annotation.type}: '$annotText'")
-                        val wrapped = when (annotation.type) {
-                            AnnotationType.WIKILINK.name -> "[[${annotText}]]"
-                            AnnotationType.TAG.name -> "#${annotText.replace(" ", "-")}"
-                            else -> annotText
-                        }
-                        // Replace the annotation text inline in the full recognized text
-                        fullText = fullText.replaceFirst(annotText, wrapped)
+                findStrokesInRect(allStrokes, annotRect).forEach { annotationStrokeIds.add(it.id) }
+            }
+
+            // Recognize non-annotation strokes to get "base text"
+            val nonAnnotStrokes = allStrokes.filter { it.id !in annotationStrokeIds }
+            val baseText = if (nonAnnotStrokes.isNotEmpty()) {
+                postProcessRecognition(recognizeStrokesSafe(nonAnnotStrokes))
+            } else ""
+            log.i("Base text (without annotations): '${baseText.take(200)}'")
+
+            // Diff to find word segments in full text that are missing from base text.
+            // These are the annotation-contributed words, in reading order.
+            val annotationTexts = diffWords(baseText, fullText)
+            log.i("Diffed annotation texts: $annotationTexts")
+
+            // Sort annotations by position (top-to-bottom, left-to-right) to match diff order
+            val sortedAnnotations = annotations.sortedWith(compareBy({ it.y }, { it.x }))
+
+            if (annotationTexts.size != sortedAnnotations.size) {
+                log.w("Diff found ${annotationTexts.size} segments but have ${sortedAnnotations.size} annotations — skipping wrapping")
+            } else {
+                for ((i, annotation) in sortedAnnotations.withIndex()) {
+                    val annotText = annotationTexts[i]
+                    if (annotText.isBlank()) continue
+                    log.i("Annotation ${annotation.type}: '$annotText'")
+                    val wrapped = when (annotation.type) {
+                        AnnotationType.WIKILINK.name -> "[[${annotText}]]"
+                        AnnotationType.TAG.name -> "#${annotText.replace(" ", "-")}"
+                        else -> annotText
                     }
+                    fullText = fullText.replaceFirst(annotText, wrapped)
                 }
             }
         }
@@ -101,6 +122,62 @@ object InboxSyncEngine {
             log.e("OnyxHWR failed: ${e.message}")
             ""
         }
+    }
+
+    /**
+     * Find contiguous word segments in [fullText] that are absent from [baseText].
+     * Uses a simple word-level LCS diff. Returns segments in the order they appear
+     * in fullText, with consecutive inserted words joined by spaces.
+     *
+     * Example: baseText="This is a document", fullText="This is a new document pkm"
+     *   → ["new", "pkm"]
+     */
+    private fun diffWords(baseText: String, fullText: String): List<String> {
+        val baseWords = baseText.split(Regex("\\s+")).filter { it.isNotBlank() }
+        val fullWords = fullText.split(Regex("\\s+")).filter { it.isNotBlank() }
+
+        // LCS to find which words in fullText are "matched" to baseText
+        val m = baseWords.size
+        val n = fullWords.size
+        val dp = Array(m + 1) { IntArray(n + 1) }
+        for (i in 1..m) {
+            for (j in 1..n) {
+                dp[i][j] = if (baseWords[i - 1].equals(fullWords[j - 1], ignoreCase = true)) {
+                    dp[i - 1][j - 1] + 1
+                } else {
+                    maxOf(dp[i - 1][j], dp[i][j - 1])
+                }
+            }
+        }
+
+        // Backtrack to find which fullText words are NOT in the LCS (= annotation words)
+        val matched = BooleanArray(n)
+        var i = m; var j = n
+        while (i > 0 && j > 0) {
+            if (baseWords[i - 1].equals(fullWords[j - 1], ignoreCase = true)) {
+                matched[j - 1] = true
+                i--; j--
+            } else if (dp[i - 1][j] > dp[i][j - 1]) {
+                i--
+            } else {
+                j--
+            }
+        }
+
+        // Group consecutive unmatched words into segments
+        val segments = mutableListOf<String>()
+        var current = mutableListOf<String>()
+        for (k in fullWords.indices) {
+            if (!matched[k]) {
+                current.add(fullWords[k])
+            } else if (current.isNotEmpty()) {
+                segments.add(current.joinToString(" "))
+                current = mutableListOf()
+            }
+        }
+        if (current.isNotEmpty()) segments.add(current.joinToString(" "))
+
+        return segments
     }
 
     private fun findStrokesInRect(strokes: List<Stroke>, rect: RectF): List<Stroke> {

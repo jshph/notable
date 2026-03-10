@@ -1,5 +1,6 @@
 package com.ethran.notable.editor.utils
 
+import android.graphics.Rect
 import androidx.core.graphics.toRect
 import com.ethran.notable.data.db.Annotation
 import com.ethran.notable.data.db.AnnotationType
@@ -75,7 +76,18 @@ fun handleAnnotation(
         )
 
         page.addAnnotations(listOf(annotation))
-        page.drawAreaPageCoordinates(boundingBox.toRect())
+        // Expand redraw area to include rendered bracket/hash glyphs
+        // that extend beyond the annotation bounding box
+        val boxHeight = (boundingBox.bottom - boundingBox.top)
+        val extraH = (boxHeight * 1.2f).toInt().coerceAtLeast(60)
+        val extraV = (boxHeight * 0.2f).toInt().coerceAtLeast(10)
+        val expandedBounds = Rect(
+            (boundingBox.left - extraH).toInt(),
+            (boundingBox.top - extraV).toInt(),
+            (boundingBox.right + extraH).toInt(),
+            (boundingBox.bottom + extraV).toInt()
+        )
+        page.drawAreaPageCoordinates(expandedBounds)
         return annotation.id
     } catch (e: Exception) {
         log.e("Handle Annotation: An error occurred: ${e.message}")

@@ -14,6 +14,7 @@ import com.onyx.android.sdk.hwr.service.HWROutputCallback
 import com.onyx.android.sdk.hwr.service.IHWRService
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.io.FileDescriptor
@@ -134,38 +135,44 @@ object OnyxHWREngine {
             ?: throw IllegalStateException("Failed to create MemoryFile PFD")
 
         return try {
-            suspendCancellableCoroutine { cont ->
-                svc.batchRecognize(pfd, object : HWROutputCallback.Stub() {
-                    override fun read(args: HWROutputArgs?) {
-                        try {
-                            // Check for error in hwrResult first
-                            val errorJson = args?.hwrResult
-                            if (!errorJson.isNullOrBlank()) {
-                                log.e("OnyxHWR error: ${errorJson.take(300)}")
-                                cont.resume("")
-                                return
-                            }
+            val result = withTimeoutOrNull(10_000) {
+                suspendCancellableCoroutine { cont ->
+                    svc.batchRecognize(pfd, object : HWROutputCallback.Stub() {
+                        override fun read(args: HWROutputArgs?) {
+                            try {
+                                // Check for error in hwrResult first
+                                val errorJson = args?.hwrResult
+                                if (!errorJson.isNullOrBlank()) {
+                                    log.e("OnyxHWR error: ${errorJson.take(300)}")
+                                    cont.resume("")
+                                    return
+                                }
 
-                            // Success: result is in PFD as JSON
-                            val resultPfd = args?.pfd
-                            if (resultPfd == null) {
-                                log.w("OnyxHWR returned no PFD and no hwrResult")
-                                cont.resume("")
-                                return
-                            }
+                                // Success: result is in PFD as JSON
+                                val resultPfd = args?.pfd
+                                if (resultPfd == null) {
+                                    log.w("OnyxHWR returned no PFD and no hwrResult")
+                                    cont.resume("")
+                                    return
+                                }
 
-                            val json = readPfdAsString(resultPfd)
-                            resultPfd.close()
-                            val text = parseHwrResult(json)
-                            log.i("OnyxHWR recognized ${text.length} chars")
-                            cont.resume(text)
-                        } catch (e: Exception) {
-                            log.e("Error parsing OnyxHWR result: ${e.message}")
-                            cont.resumeWithException(e)
+                                val json = readPfdAsString(resultPfd)
+                                resultPfd.close()
+                                val text = parseHwrResult(json)
+                                log.i("OnyxHWR recognized ${text.length} chars")
+                                cont.resume(text)
+                            } catch (e: Exception) {
+                                log.e("Error parsing OnyxHWR result: ${e.message}")
+                                cont.resumeWithException(e)
+                            }
                         }
-                    }
-                })
+                    })
+                }
             }
+            if (result == null) {
+                log.e("OnyxHWR timed out after 10s")
+            }
+            result
         } finally {
             pfd.close()
         }

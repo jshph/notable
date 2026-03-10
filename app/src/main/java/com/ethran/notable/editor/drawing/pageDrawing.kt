@@ -31,24 +31,29 @@ import io.shipbook.shipbooksdk.ShipBook
 private val pageDrawingLog = ShipBook.getLogger("PageDrawingLog")
 
 // Annotation overlay paints
-private val wikiLinkPaint = Paint().apply {
-    color = Color.argb(130, 0, 100, 255) // semi-transparent blue fill
+private val wikiLinkFillPaint = Paint().apply {
+    color = Color.argb(50, 0, 100, 255) // very light blue wash
     style = Paint.Style.FILL
 }
-private val wikiLinkBorderPaint = Paint().apply {
-    color = Color.argb(255, 0, 80, 220) // solid blue border
-    style = Paint.Style.STROKE
-    strokeWidth = 4f
+private val wikiLinkBracketPaint = Paint().apply {
+    color = Color.argb(200, 0, 80, 220) // blue brackets
+    style = Paint.Style.FILL
     isAntiAlias = true
+    typeface = android.graphics.Typeface.create(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD)
 }
-private val tagPaint = Paint().apply {
-    color = Color.argb(130, 0, 180, 0) // semi-transparent green fill
+private val tagFillPaint = Paint().apply {
+    color = Color.argb(50, 0, 180, 0) // very light green wash
     style = Paint.Style.FILL
 }
-private val tagBorderPaint = Paint().apply {
-    color = Color.argb(255, 0, 150, 0) // solid green border
+private val tagHashPaint = Paint().apply {
+    color = Color.argb(200, 0, 150, 0) // green hash symbol
+    style = Paint.Style.FILL
+    isAntiAlias = true
+    typeface = android.graphics.Typeface.create(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD)
+}
+private val annotationUnderlinePaint = Paint().apply {
     style = Paint.Style.STROKE
-    strokeWidth = 4f
+    strokeWidth = 3f
     isAntiAlias = true
 }
 
@@ -59,13 +64,67 @@ fun drawAnnotation(canvas: Canvas, annotation: Annotation, offset: Offset) {
         annotation.x + annotation.width + offset.x,
         annotation.y + annotation.height + offset.y
     )
-    val (fillPaint, borderPaint) = if (annotation.type == AnnotationType.WIKILINK.name) {
-        wikiLinkPaint to wikiLinkBorderPaint
+    val boxHeight = rect.height()
+    val padding = boxHeight * 0.15f
+
+    if (annotation.type == AnnotationType.WIKILINK.name) {
+        // Size brackets proportional to annotation height
+        val bracketSize = boxHeight * 0.55f
+        wikiLinkBracketPaint.textSize = bracketSize
+
+        val bracketWidth = wikiLinkBracketPaint.measureText("[[")
+        val bracketGap = padding * 0.5f
+
+        // Expanded rect includes brackets
+        val expandedRect = RectF(
+            rect.left - bracketWidth - bracketGap,
+            rect.top - padding,
+            rect.right + bracketWidth + bracketGap,
+            rect.bottom + padding
+        )
+
+        // Light fill over the whole area
+        val cornerRadius = boxHeight * 0.15f
+        canvas.drawRoundRect(expandedRect, cornerRadius, cornerRadius, wikiLinkFillPaint)
+
+        // Draw [[ on the left
+        val textY = rect.centerY() + bracketSize * 0.35f
+        canvas.drawText("[[", expandedRect.left + bracketGap * 0.5f, textY, wikiLinkBracketPaint)
+
+        // Draw ]] on the right
+        canvas.drawText("]]", rect.right + bracketGap * 0.5f, textY, wikiLinkBracketPaint)
+
+        // Subtle underline under the handwritten content
+        annotationUnderlinePaint.color = Color.argb(120, 0, 80, 220)
+        canvas.drawLine(rect.left, rect.bottom + padding * 0.3f, rect.right, rect.bottom + padding * 0.3f, annotationUnderlinePaint)
     } else {
-        tagPaint to tagBorderPaint
+        // TAG: draw # prefix
+        val hashSize = boxHeight * 0.65f
+        tagHashPaint.textSize = hashSize
+
+        val hashWidth = tagHashPaint.measureText("#")
+        val hashGap = padding * 0.6f
+
+        // Expanded rect includes # prefix
+        val expandedRect = RectF(
+            rect.left - hashWidth - hashGap,
+            rect.top - padding,
+            rect.right + padding,
+            rect.bottom + padding
+        )
+
+        // Light fill over the whole area
+        val cornerRadius = boxHeight * 0.15f
+        canvas.drawRoundRect(expandedRect, cornerRadius, cornerRadius, tagFillPaint)
+
+        // Draw # to the left
+        val textY = rect.centerY() + hashSize * 0.35f
+        canvas.drawText("#", expandedRect.left + hashGap * 0.3f, textY, tagHashPaint)
+
+        // Subtle underline under the handwritten content
+        annotationUnderlinePaint.color = Color.argb(120, 0, 150, 0)
+        canvas.drawLine(rect.left, rect.bottom + padding * 0.3f, rect.right, rect.bottom + padding * 0.3f, annotationUnderlinePaint)
     }
-    canvas.drawRect(rect, fillPaint)
-    canvas.drawRect(rect, borderPaint)
 }
 
 

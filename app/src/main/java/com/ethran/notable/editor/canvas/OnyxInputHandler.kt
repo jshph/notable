@@ -342,11 +342,17 @@ class OnyxInputHandler(
                                 drawCanvas.drawCanvasToView(null)
                                 resetScreenFreeze(touchHelper!!)
                                 val bounds = calculateBoundingBox(scaledPoints) { Pair(it.x, it.y) }
+                                // Extra padding accounts for rendered bracket/hash glyphs
+                                // that extend beyond the annotation bounding box.
+                                // Brackets use fontSize = height*0.55, "[[" is ~1.2x fontSize wide,
+                                // plus gap, so we need ~height on each side to be safe.
+                                val boxHeight = bounds.bottom - bounds.top
+                                val extraHorizontal = (boxHeight * 1.2f).toInt().coerceAtLeast(60)
                                 val padding = 20
                                 val dirtyRect = Rect(
-                                    (bounds.left - page.scroll.x - padding).toInt(),
+                                    (bounds.left - page.scroll.x - padding - extraHorizontal).toInt(),
                                     (bounds.top - page.scroll.y - padding).toInt(),
-                                    (bounds.right - page.scroll.x + padding).toInt(),
+                                    (bounds.right - page.scroll.x + padding + extraHorizontal).toInt(),
                                     (bounds.bottom - page.scroll.y + padding).toInt()
                                 )
                                 refreshScreenRegion(drawCanvas, dirtyRect)
