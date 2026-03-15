@@ -133,7 +133,7 @@ fun NotableNavHost(
                 SettingsView(
                     onBack = { appNavigator.goBack() },
                     goToWelcome = { appNavigator.goToWelcome() },
-                    goToSystemInfo = { appNavigator.goToSystemInfo() }
+                    goToSystemInfo = { appNavigator.goToSystemInfo() },
                 )
                 appNavigator.cleanCurrentPageId()
             }

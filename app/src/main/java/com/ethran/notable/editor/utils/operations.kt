@@ -8,8 +8,10 @@ import android.graphics.RectF
 import android.graphics.Region
 import androidx.compose.ui.geometry.Offset
 import androidx.core.graphics.toRegion
+import com.ethran.notable.data.db.Annotation
 import com.ethran.notable.data.db.Image
 import com.ethran.notable.data.db.Stroke
+import com.ethran.notable.editor.drawing.annotationVisualBounds
 import com.ethran.notable.data.db.StrokePoint
 import com.ethran.notable.data.model.SimplePointF
 import com.onyx.android.sdk.data.note.TouchPoint
@@ -118,6 +120,12 @@ fun imageBoundsInt(images: List<Image>): Rect {
     return rect
 }
 
+fun annotationBounds(annotations: List<Annotation>): Rect {
+    if (annotations.isEmpty()) return Rect()
+    val rect = annotationVisualBounds(annotations[0])
+    annotations.drop(1).forEach { rect.union(annotationVisualBounds(it)) }
+    return rect
+}
 
 fun pathToRegion(path: Path): Region {
     val bounds = RectF()

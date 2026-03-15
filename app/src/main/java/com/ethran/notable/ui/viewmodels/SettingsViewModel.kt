@@ -10,6 +10,7 @@ import com.ethran.notable.APP_SETTINGS_KEY
 import com.ethran.notable.R
 import com.ethran.notable.data.datastore.AppSettings
 import com.ethran.notable.data.datastore.GlobalAppSettings
+import com.ethran.notable.data.db.AppDatabase
 import com.ethran.notable.data.db.KvProxy
 import com.ethran.notable.utils.isLatestVersion
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -30,6 +31,7 @@ data class GestureRowModel(
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     private val kvProxy: KvProxy,
+    private val db: AppDatabase,
 ) : ViewModel() {
     companion object {}
 
@@ -65,6 +67,15 @@ class SettingsViewModel @Inject constructor(
         // 2. Persist to DB in the background
         viewModelScope.launch(Dispatchers.IO) {
             kvProxy.setKv(APP_SETTINGS_KEY, newSettings, AppSettings.serializer())
+        }
+    }
+
+    fun clearAllPages(onComplete: () -> Unit) {
+        viewModelScope.launch(Dispatchers.IO) {
+            db.clearAllTables()
+            withContext(Dispatchers.Main) {
+                onComplete()
+            }
         }
     }
 

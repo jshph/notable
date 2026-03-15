@@ -4,6 +4,9 @@ import android.graphics.Rect
 import androidx.compose.runtime.snapshotFlow
 import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.PageDataManager
+import com.ethran.notable.data.db.BookRepository
+import com.ethran.notable.data.db.KvProxy
+import com.ethran.notable.data.db.PageRepository
 import com.ethran.notable.editor.PageView
 import com.ethran.notable.editor.state.EditorState
 import com.ethran.notable.editor.state.History
@@ -48,11 +51,11 @@ class CanvasObserverRegistry(
         observeSelectionGesture()
         observeClearPage()
         observeRestartAfterConfChange()
-        observeReloadFromDb()
         observePenChanges()
         observeIsDrawingSnapshot()
         observeToolbar()
         observeMode()
+        observeAnnotationMode()
         observeHistory()
         observeSaveCurrent()
         observeQuickNav()
@@ -103,6 +106,7 @@ class CanvasObserverRegistry(
             CanvasEventBus.onFocusChange.collect { hasFocus ->
                 logCanvasObserver.v("App has focus: $hasFocus")
                 if (hasFocus) {
+                    state.checkForSelectionsAndMenus()
                     inputHandler.updatePenAndStroke() // The setting might been changed by other app.
                     drawCanvas.drawCanvasToView(null)
                 } else {
@@ -154,19 +158,10 @@ class CanvasObserverRegistry(
 
     private fun observeRestartAfterConfChange() {
         coroutineScope.launch {
-            CanvasEventBus.reinitSignal.collect {
+            CanvasEventBus.restartAfterConfChange.collect {
                 logCanvasObserver.v("Configuration changed!")
                 drawCanvas.init()
                 drawCanvas.drawCanvasToView(null)
-            }
-        }
-    }
-
-    private fun observeReloadFromDb(){
-        coroutineScope.launch {
-            CanvasEventBus.reloadFromDb.collect {
-                page.refreshCurrentPage()
-                refreshManager.refreshUiSuspend()
             }
         }
     }
@@ -201,7 +196,9 @@ class CanvasObserverRegistry(
                 logCanvasObserver.v("isDrawing change to $it")
                 // We need to close all menus
                 if (it) {
-                    CanvasEventBus.closeMenusSignal.emit(Unit)
+//                    logCallStack("Closing all menus")
+                    state.closeAllMenus()
+//                    EpdController.waitForUpdateFinished() // it does not work.
                     waitForEpdRefresh()
                 }
                 inputHandler.updateIsDrawing()
@@ -213,8 +210,15 @@ class CanvasObserverRegistry(
         coroutineScope.launch {
             snapshotFlow { state.isToolbarOpen }.drop(1).collect {
                 logCanvasObserver.v("istoolbaropen change: ${state.isToolbarOpen}")
+                // updateActiveSurface reconfigures exclude rects and restores pen/stroke style
                 inputHandler.updateActiveSurface()
-                inputHandler.updatePenAndStroke()
+                refreshManager.refreshUi(null)
+            }
+        }
+        coroutineScope.launch {
+            snapshotFlow { state.isInboxTagsExpanded }.drop(1).collect {
+                logCanvasObserver.v("inbox tags expanded change: ${state.isInboxTagsExpanded}")
+                inputHandler.updateActiveSurface()
                 refreshManager.refreshUi(null)
             }
         }
@@ -226,6 +230,17 @@ class CanvasObserverRegistry(
                 logCanvasObserver.v("mode change: ${drawCanvas.getActualState().mode}")
                 inputHandler.updatePenAndStroke()
                 refreshManager.refreshUiSuspend()
+            }
+        }
+    }
+
+    private fun observeAnnotationMode() {
+        coroutineScope.launch {
+            snapshotFlow { drawCanvas.getActualState().annotationMode }.drop(1).collect {
+                logCanvasObserver.v("annotation mode change: ${drawCanvas.getActualState().annotationMode}")
+                inputHandler.updatePenAndStroke()
+                // Briefly unfreeze e-ink display so sidebar button state becomes visible
+                refreshManager.refreshUi(null)
             }
         }
     }

@@ -6,11 +6,15 @@ import android.graphics.RectF
 import android.util.Log
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.toRect
+import com.ethran.notable.data.datastore.AppSettings
 import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.editor.PageView
+import com.ethran.notable.editor.ui.INBOX_TOOLBAR_COLLAPSED_HEIGHT
+import com.ethran.notable.editor.ui.INBOX_TOOLBAR_EXPANDED_HEIGHT
 import com.ethran.notable.editor.state.EditorState
 import com.ethran.notable.editor.state.History
 import com.ethran.notable.editor.state.Mode
+import com.ethran.notable.editor.state.Operation
 import com.ethran.notable.editor.utils.DeviceCompat
 import com.ethran.notable.editor.utils.Eraser
 import com.ethran.notable.editor.utils.Pen
@@ -18,14 +22,17 @@ import com.ethran.notable.editor.utils.calculateBoundingBox
 import com.ethran.notable.editor.utils.copyInput
 import com.ethran.notable.editor.utils.copyInputToSimplePointF
 import com.ethran.notable.editor.utils.getModifiedStrokeEndpoints
+import com.ethran.notable.editor.state.AnnotationMode
+import com.ethran.notable.editor.utils.handleAnnotation
 import com.ethran.notable.editor.utils.handleDraw
 import com.ethran.notable.editor.utils.handleErase
 import com.ethran.notable.editor.utils.handleScribbleToErase
 import com.ethran.notable.editor.utils.handleSelect
 import com.ethran.notable.editor.utils.onSurfaceInit
 import com.ethran.notable.editor.utils.partialRefreshRegionOnce
-import com.ethran.notable.editor.utils.penToStroke
 import com.ethran.notable.editor.utils.prepareForPartialUpdate
+import com.ethran.notable.editor.utils.refreshScreenRegion
+import com.ethran.notable.editor.utils.resetScreenFreeze
 import com.ethran.notable.editor.utils.restoreDefaults
 import com.ethran.notable.editor.utils.setupSurface
 import com.ethran.notable.editor.utils.transformToLine
@@ -127,36 +134,47 @@ class OnyxInputHandler(
 
     fun updatePenAndStroke() {
         if(touchHelper == null) return
-        // it takes around 11 ms to run on Note 4c.
-        log.i("Update pen and stroke")
+        log.i("Update pen and stroke: pen=${state.pen}, mode=${state.mode}")
+        // When annotation mode is active, show a dashed outline instead of the normal pen stroke
+        if (state.annotationMode != AnnotationMode.None) {
+            val annotColor = if (state.annotationMode == AnnotationMode.WikiLink)
+                Color.rgb(0, 100, 255) else Color.rgb(0, 180, 0)
+            touchHelper!!.setStrokeStyle(Pen.DASHED.strokeStyle)
+                ?.setStrokeWidth(3f)
+                ?.setStrokeColor(annotColor)
+            Device.currentDevice().setStrokeParameters(
+                Pen.DASHED.strokeStyle,
+                floatArrayOf(5f, 9f, 9f, 0f)
+            )
+            return
+        }
+
         when (state.mode) {
-            // we need to change size according to zoom level before drawing on screen
-            Mode.Draw, Mode.Line -> touchHelper!!.setStrokeStyle(penToStroke(state.pen))
-                ?.setStrokeWidth(state.penSettings[state.pen.penName]!!.strokeSize * page.zoomLevel.value)
-                ?.setStrokeColor(state.penSettings[state.pen.penName]!!.color)
+            Mode.Draw, Mode.Line -> {
+                val setting = state.penSettings[state.pen.penName] ?: return
+                touchHelper!!.setStrokeStyle(state.pen.strokeStyle)
+                    ?.setStrokeWidth(setting.strokeSize * page.zoomLevel.value)
+                    ?.setStrokeColor(setting.color)
+            }
 
-            Mode.Erase -> {
-                when (state.eraser) {
-                    Eraser.PEN -> touchHelper!!.setStrokeStyle(penToStroke(Pen.MARKER))
-                        ?.setStrokeWidth(30f)
-                        ?.setStrokeColor(Color.GRAY)
+            Mode.Erase -> when (state.eraser) {
+                Eraser.PEN -> touchHelper!!.setStrokeStyle(Pen.MARKER.strokeStyle)
+                    ?.setStrokeWidth(30f)
+                    ?.setStrokeColor(Color.GRAY)
 
-                    Eraser.SELECT -> {
-                        val dashStyleID = penToStroke(Pen.DASHED)
-                        touchHelper!!.setStrokeStyle(dashStyleID)
-                            ?.setStrokeWidth(3f)
-                            ?.setStrokeColor(Color.BLACK)
-                        val params = FloatArray(4)
-                        params[0] = 5f // thickness
-                        params[1] = 9f // no idea
-                        params[2] = 9f // no idea
-                        params[3] = 0f // no idea
-                        Device.currentDevice().setStrokeParameters(dashStyleID, params)
-                    }
+                Eraser.SELECT -> {
+                    touchHelper!!.setStrokeStyle(Pen.DASHED.strokeStyle)
+                        ?.setStrokeWidth(3f)
+                        ?.setStrokeColor(Color.BLACK)
+                    Device.currentDevice().setStrokeParameters(
+                        Pen.DASHED.strokeStyle,
+                        floatArrayOf(5f, 9f, 9f, 0f)
+                    )
                 }
             }
 
-            Mode.Select -> touchHelper?.setStrokeStyle(penToStroke(Pen.BALLPEN))?.setStrokeWidth(3f)
+            Mode.Select -> touchHelper?.setStrokeStyle(Pen.BALLPEN.strokeStyle)
+                ?.setStrokeWidth(3f)
                 ?.setStrokeColor(Color.GRAY)
         }
     }
@@ -176,18 +194,36 @@ class OnyxInputHandler(
     }
 
     fun updateActiveSurface() {
-        // Takes at least 50ms on Note 4c,
-        // and I don't think that we need it immediately
         log.i("Update editable surface")
         coroutineScope.launch {
             onSurfaceInit(drawCanvas)
-            val toolbarHeight =
-                if (state.isToolbarOpen) convertDpToPixel(40.dp, drawCanvas.context).toInt() else 0
-            setupSurface(
-                drawCanvas,
-                touchHelper,
-                toolbarHeight
-            )
+
+            val (topExclude, bottomExclude) = calculateExcludeHeights()
+            setupSurface(drawCanvas, touchHelper, topExclude, bottomExclude)
+
+            // Must set pen/stroke AFTER setupSurface, because openRawDrawing() resets the stroke style
+            updatePenAndStroke()
+        }
+    }
+
+    private fun calculateExcludeHeights(): Pair<Int, Int> {
+        if (state.isInboxPage) {
+            val toolbarHeight = if (state.isInboxTagsExpanded) {
+                convertDpToPixel(INBOX_TOOLBAR_EXPANDED_HEIGHT, drawCanvas.context).toInt()
+            } else {
+                convertDpToPixel(INBOX_TOOLBAR_COLLAPSED_HEIGHT, drawCanvas.context).toInt()
+            }
+            val penToolbarHeight = convertDpToPixel(40.dp, drawCanvas.context).toInt()
+            return toolbarHeight to penToolbarHeight
+        }
+
+        val toolbarHeight = if (state.isToolbarOpen) {
+            convertDpToPixel(40.dp, drawCanvas.context).toInt()
+        } else 0
+
+        return when (GlobalAppSettings.current.toolbarPosition) {
+            AppSettings.Position.Top -> toolbarHeight to 0
+            AppSettings.Position.Bottom -> 0 to toolbarHeight
         }
     }
     private fun onRawDrawingList(plist: TouchPointList) {
@@ -274,30 +310,70 @@ class OnyxInputHandler(
                         val lock = System.currentTimeMillis()
                         log.d("lock obtained in ${lock - startTime} ms")
 
-                        // Thread.sleep(1000)
                         // transform points to page space
                         val scaledPoints =
                             copyInput(plist.points, page.scroll, page.zoomLevel.value)
-                        val firstPointTime = plist.points.first().timestamp
-                        val erasedByScribbleDirtyRect = handleScribbleToErase(
-                            page,
-                            scaledPoints,
-                            history,
-                            drawCanvas.getActualState().pen,
-                            currentLastStrokeEndTime,
-                            firstPointTime
-                        )
-                        if (erasedByScribbleDirtyRect.isNullOrEmpty()) {
-                            log.d("Drawing...")
-                            // draw the stroke
-                            handleDraw(
-                                drawCanvas.page,
-                                strokeHistoryBatch,
-                                drawCanvas.getActualState().penSettings[drawCanvas.getActualState().pen.penName]!!.strokeSize,
-                                drawCanvas.getActualState().penSettings[drawCanvas.getActualState().pen.penName]!!.color,
+                        val annotMode = drawCanvas.getActualState().annotationMode
+                        // Skip scribble-to-erase when in annotation mode
+                        val erasedByScribbleDirtyRect = if (annotMode != AnnotationMode.None) {
+                            null
+                        } else {
+                            val firstPointTime = plist.points.first().timestamp
+                            handleScribbleToErase(
+                                page,
+                                scaledPoints,
+                                history,
                                 drawCanvas.getActualState().pen,
-                                scaledPoints
+                                currentLastStrokeEndTime,
+                                firstPointTime
                             )
+                        }
+                        if (erasedByScribbleDirtyRect.isNullOrEmpty()) {
+                            if (annotMode != AnnotationMode.None) {
+                                log.d("Creating annotation...")
+                                val annotationId = handleAnnotation(
+                                    drawCanvas.page,
+                                    annotMode,
+                                    scaledPoints
+                                )
+                                if (annotationId != null) {
+                                    history.addOperationsToHistory(
+                                        listOf(Operation.DeleteAnnotation(listOf(annotationId)))
+                                    )
+                                }
+                                // Reset to one-shot: annotation mode turns off after one box
+                                drawCanvas.getActualState().annotationMode = AnnotationMode.None
+                                // Redraw canvas, then do a full GC refresh to clear
+                                // the Onyx SDK's dashed line preview artifacts from e-ink
+                                drawCanvas.drawCanvasToView(null)
+                                resetScreenFreeze(touchHelper!!)
+                                val bounds = calculateBoundingBox(scaledPoints) { Pair(it.x, it.y) }
+                                // Extra padding accounts for rendered bracket/hash glyphs
+                                // that extend beyond the annotation bounding box.
+                                // Brackets use fontSize = height*0.55, "[[" is ~1.2x fontSize wide,
+                                // plus gap, so we need ~height on each side to be safe.
+                                val boxHeight = bounds.bottom - bounds.top
+                                val extraHorizontal = (boxHeight * 1.2f).toInt().coerceAtLeast(60)
+                                val padding = 20
+                                val dirtyRect = Rect(
+                                    (bounds.left - page.scroll.x - padding - extraHorizontal).toInt(),
+                                    (bounds.top - page.scroll.y - padding).toInt(),
+                                    (bounds.right - page.scroll.x + padding + extraHorizontal).toInt(),
+                                    (bounds.bottom - page.scroll.y + padding).toInt()
+                                )
+                                refreshScreenRegion(drawCanvas, dirtyRect)
+                            } else {
+                                log.d("Drawing...")
+                                // draw the stroke
+                                handleDraw(
+                                    drawCanvas.page,
+                                    strokeHistoryBatch,
+                                    drawCanvas.getActualState().penSettings[drawCanvas.getActualState().pen.penName]!!.strokeSize,
+                                    drawCanvas.getActualState().penSettings[drawCanvas.getActualState().pen.penName]!!.color,
+                                    drawCanvas.getActualState().pen,
+                                    scaledPoints
+                                )
+                            }
                         } else {
                             log.d("Erased by scribble, $erasedByScribbleDirtyRect")
                             drawCanvas.drawCanvasToView(erasedByScribbleDirtyRect)

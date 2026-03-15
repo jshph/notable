@@ -42,7 +42,6 @@ import java.io.OutputStream
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import javax.inject.Inject
-import javax.inject.Singleton
 
 /* ---------------------------- Public API ---------------------------- */
 
@@ -60,7 +59,6 @@ data class ExportOptions(
     val fileName: String? = null
 )
 
-@Singleton
 class ExportEngine @Inject constructor(
     @param:ApplicationContext private val context: Context,
     private val appRepository: AppRepository,

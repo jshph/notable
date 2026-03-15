@@ -20,12 +20,14 @@ import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.CachedBackground
 import com.ethran.notable.data.PageDataManager
 import com.ethran.notable.data.datastore.GlobalAppSettings
+import com.ethran.notable.data.db.Annotation
 import com.ethran.notable.data.db.Image
 import com.ethran.notable.data.db.Page
 import com.ethran.notable.data.db.Stroke
 import com.ethran.notable.data.db.getBackgroundType
 import com.ethran.notable.data.model.BackgroundType
 import com.ethran.notable.editor.canvas.CanvasEventBus
+import com.ethran.notable.editor.drawing.annotationVisualBounds
 import com.ethran.notable.editor.drawing.drawBg
 import com.ethran.notable.editor.drawing.drawOnCanvasFromPage
 import com.ethran.notable.editor.utils.div
@@ -94,6 +96,10 @@ class PageView(
     var images: List<Image>
         get() = PageDataManager.getImages(currentPageId)
         set(value) = PageDataManager.setImages(currentPageId, value)
+
+    var annotations: List<Annotation>
+        get() = PageDataManager.getAnnotations(currentPageId)
+        set(value) = PageDataManager.setAnnotations(currentPageId, value)
 
     private var currentBackground: CachedBackground
         get() = PageDataManager.getBackground(currentPageId)
@@ -346,6 +352,22 @@ class PageView(
         return PageDataManager.getStrokes(strokeIds, currentPageId)
     }
 
+    fun addAnnotations(annotationsToAdd: List<Annotation>) {
+        annotations = annotations + annotationsToAdd
+        coroutineScope.launch(Dispatchers.IO) {
+            appRepository.annotationRepository.create(annotationsToAdd)
+        }
+        persistBitmapDebounced()
+    }
+
+    fun removeAnnotations(annotationIds: List<String>) {
+        annotations = annotations.filter { a -> a.id !in annotationIds }
+        coroutineScope.launch(Dispatchers.IO) {
+            appRepository.annotationRepository.deleteAll(annotationIds)
+        }
+        persistBitmapDebounced()
+    }
+
     fun updateHeightForChange(strokesChanged: List<Stroke>) {
         strokesChanged.forEach {
             val bottomPlusPadding = it.bottom + 50
@@ -470,7 +492,23 @@ class PageView(
         ignoredImageIds: List<String> = listOf(),
         canvas: Canvas? = null
     ) {
-        val areaInScreen = toScreenCoordinates(pageArea)
+        // Expand the redraw area to include the full visual extent of any
+        // annotations whose glyphs (brackets, hash) overlap with pageArea.
+        // Without this, partial redraws clip away glyph parts that extend
+        // beyond the annotation's data bounds.
+        var expanded = pageArea
+        annotations.forEach { annotation ->
+            val visualBounds = annotationVisualBounds(annotation)
+            if (Rect.intersects(visualBounds, pageArea)) {
+                expanded = Rect(
+                    min(expanded.left, visualBounds.left),
+                    min(expanded.top, visualBounds.top),
+                    max(expanded.right, visualBounds.right),
+                    max(expanded.bottom, visualBounds.bottom)
+                )
+            }
+        }
+        val areaInScreen = toScreenCoordinates(expanded)
         drawAreaScreenCoordinates(areaInScreen, ignoredStrokeIds, ignoredImageIds, canvas)
     }
 
@@ -797,15 +835,17 @@ class PageView(
 
 
     // updates page setting in db, (for instance type of background)
-    // and redraws page to vew.
-    suspend fun refreshCurrentPage() {
-        pageFromDb = appRepository.pageRepository.getById(currentPageId)
-        log.i("Refresh current page, bacground: ${pageFromDb?.background}")
-        withContext(Dispatchers.Main) {
-            drawAreaScreenCoordinates(Rect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT))
-            persistBitmapDebounced()
+// and redraws page to vew.
+    fun updatePageSettings(page: Page) {
+        coroutineScope.launch(Dispatchers.IO) {
+            appRepository.pageRepository.update(page)
+            pageFromDb = appRepository.pageRepository.getById(currentPageId)
+            log.i("Page settings updated, ${pageFromDb?.background} | ${page.background}")
+            withContext(Dispatchers.Main) {
+                drawAreaScreenCoordinates(Rect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT))
+                persistBitmapDebounced()
+            }
         }
-
     }
 
     fun updateDimensions(newWidth: Int, newHeight: Int) {

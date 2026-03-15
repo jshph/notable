@@ -7,10 +7,9 @@ import com.onyx.android.sdk.data.note.TouchPoint
 
 
 fun copyInput(touchPoints: List<TouchPoint>, scroll: Offset, scale: Float): List<StrokePoint> {
-    val points = touchPoints.map {
-        it.toStrokePoint(scroll, scale)
-    }
-    return points
+    if (touchPoints.isEmpty()) return emptyList()
+    val baseTime = touchPoints.first().timestamp
+    return touchPoints.map { it.toStrokePoint(scroll, scale, baseTime) }
 }
 
 

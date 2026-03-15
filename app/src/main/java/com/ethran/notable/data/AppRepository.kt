@@ -1,6 +1,7 @@
 package com.ethran.notable.data
 
 import com.ethran.notable.data.datastore.GlobalAppSettings
+import com.ethran.notable.data.db.AnnotationRepository
 import com.ethran.notable.data.db.BookRepository
 import com.ethran.notable.data.db.FolderRepository
 import com.ethran.notable.data.db.ImageRepository
@@ -24,6 +25,7 @@ class AppRepository @Inject constructor(
     val pageRepository: PageRepository,
     val strokeRepository: StrokeRepository,
     val imageRepository: ImageRepository,
+    val annotationRepository: AnnotationRepository,
     val folderRepository: FolderRepository,
     val kvProxy: KvProxy
 ) {
@@ -128,7 +130,7 @@ class AppRepository @Inject constructor(
     suspend fun createNewQuickPage(parentFolderId: String? = null) : String? {
         val page = Page(
             notebookId = null,
-            background = GlobalAppSettings.current.defaultNativeTemplate,
+            background = "inbox",
             backgroundType = BackgroundType.Native.key,
             parentFolderId = parentFolderId
         )

@@ -185,6 +185,64 @@ fun drawHexagon(canvas: Canvas, centerX: Float, centerY: Float, r: Float) {
     canvas.drawPath(path, defaultPaintStroke)
 }
 
+// Inbox capture template zones (in page coordinates, before scroll)
+// Note: toolbar occupies ~80px at top of screen
+const val INBOX_CREATED_Y = 80f
+const val INBOX_TAGS_LABEL_Y = 170f
+const val INBOX_TAGS_ZONE_BOTTOM = 350f
+const val INBOX_DIVIDER_Y = 370f
+const val INBOX_CONTENT_START_Y = 400f
+const val INBOX_LEFT_MARGIN = 40f
+const val INBOX_LABEL_TEXT_SIZE = 40f
+
+private val inboxLabelPaint = Paint().apply {
+    color = Color.DKGRAY
+    textSize = INBOX_LABEL_TEXT_SIZE
+    isAntiAlias = true
+    typeface = android.graphics.Typeface.create("sans-serif-light", android.graphics.Typeface.NORMAL)
+}
+
+private val inboxValuePaint = Paint().apply {
+    color = Color.BLACK
+    textSize = INBOX_LABEL_TEXT_SIZE
+    isAntiAlias = true
+    typeface = android.graphics.Typeface.create("sans-serif", android.graphics.Typeface.NORMAL)
+}
+
+private val inboxDividerPaint = Paint().apply {
+    color = Color.DKGRAY
+    strokeWidth = 2f
+    isAntiAlias = true
+}
+
+private val inboxZonePaint = Paint().apply {
+    color = Color.argb(12, 0, 0, 0)
+    style = Paint.Style.FILL
+}
+
+fun drawInboxBg(canvas: Canvas, scroll: Offset, scale: Float) {
+    val width = (canvas.width / scale)
+    val canvasHeight = (canvas.height / scale)
+
+    // White background
+    canvas.drawColor(Color.WHITE)
+
+    // Lined content area — starts from the top since tags are handled by Compose UI
+    val offset = IntOffset(lineHeight, lineHeight) - IntOffset(
+        scroll.x.toInt() % lineHeight, scroll.y.toInt() % lineHeight
+    )
+
+    for (y in 0..(canvasHeight.toInt()) step lineHeight) {
+        canvas.drawLine(
+            INBOX_LEFT_MARGIN,
+            y.toFloat() + offset.y,
+            width - INBOX_LEFT_MARGIN,
+            y.toFloat() + offset.y,
+            defaultPaint
+        )
+    }
+}
+
 fun drawBackgroundImages(
     context: Context,
     canvas: Canvas,
@@ -392,6 +450,7 @@ fun drawBg(
                 "lined" -> drawLinedBg(canvas, scroll, scale)
                 "squared" -> drawSquaredBg(canvas, scroll, scale)
                 "hexed" -> drawHexedBg(canvas, scroll, scale)
+                "inbox" -> drawInboxBg(canvas, scroll, scale)
                 else -> {
                     throw IllegalArgumentException("Unknown background type: $background")
                 }

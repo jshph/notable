@@ -50,6 +50,7 @@ fun EditorGestureReceiver(
                     try {
                         // Detect initial touch
                         val down = awaitFirstDown()
+                        log.i("GestureReceiver got touch at (${down.position.x}, ${down.position.y}), type=${down.type}, consumed=${down.isConsumed}")
 
                         // We should not get any stylus events
                         require(
