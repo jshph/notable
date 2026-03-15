@@ -63,15 +63,29 @@ fun Stroke.toInkStroke(offset: Offset = Offset.Zero): InkStroke {
         return InkStroke(brushForStroke(this), batch.toImmutable())
     }
 
+    // Track cumulative elapsed time (dt stores per-point deltas, Ink API wants cumulative)
+    var cumulativeMs = 0L
+    var prevX = Float.NaN
+    var prevY = Float.NaN
+    var prevElapsed = -1L
+
     for (i in points.indices) {
         val pt = points[i]
-        // Use real dt if available, otherwise synthesize realistic timing
-        val elapsedMs = pt.dt?.toLong() ?: (i * SYNTHETIC_DT_MS)
+        // Accumulate dt into cumulative elapsed time
+        cumulativeMs += pt.dt?.toLong() ?: SYNTHETIC_DT_MS
+        val elapsedMs = cumulativeMs
         val pressure = pt.pressure?.let { it / maxPressure.toFloat() } ?: 0.5f
         // tiltRadians must be in [0, π/2] or -1 (unset). Our tiltX is degrees [-90, 90].
         val tiltRad = pt.tiltX?.let {
             Math.toRadians(it.toDouble()).toFloat().coerceIn(0f, Math.PI.toFloat() / 2f)
         } ?: -1f
+
+        // Ink API rejects duplicate (position, elapsed_time) pairs — skip them
+        if (pt.x == prevX && pt.y == prevY && elapsedMs == prevElapsed) continue
+
+        prevX = pt.x
+        prevY = pt.y
+        prevElapsed = elapsedMs
 
         batch.add(
             type = InputToolType.STYLUS,
