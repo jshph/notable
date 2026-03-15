@@ -1,289 +1,158 @@
-<!-- markdownlint-configure-file {
-  "MD013": {"code_blocks": false, "tables": false},
-  "MD033": false,
-  "MD041": false
-} -->
-
 <div align="center">
 
-[![License][license-shield]][license-url]
-[![Total Downloads][downloads-shield]][downloads-url]
-[![Discord][discord-shield]][discord-url]
+# Notable for Obsidian
 
-![Notable App][logo]
+**Handwriting → Markdown → Knowledge**
 
-# Notable (Fork)
+A capture surface for [Obsidian](https://obsidian.md) on [Onyx Boox](https://www.boox.com/) e-ink tablets.
+Write with a pen. Tag with your vault's vocabulary. Sync as markdown.
 
-A maintained and customized fork of the archived [olup/notable](https://github.com/olup/notable) project.
-
-[![🐛 Report Bug][bug-shield]][bug-url]
-[![Download Latest][download-shield]][download-url]
-[![💡 Request Feature][feature-shield]][feature-url]
-
-<a href="https://github.com/sponsors/ethran">
-  <img src="https://img.shields.io/badge/Sponsor_on-GitHub-%23ea4aaa?logo=githubsponsors&style=for-the-badge" alt="Sponsor on GitHub">
-</a>
-
-<a href="https://ko-fi.com/rethran" target="_blank">
-  <img src="https://ko-fi.com/img/githubbutton_sm.svg" alt="Support me on Ko-fi">
-</a>
+[![Kotlin](https://img.shields.io/badge/Kotlin-2.3-7F52FF?logo=kotlin&logoColor=white)](https://kotlinlang.org)
+[![Jetpack Compose](https://img.shields.io/badge/Jetpack_Compose-Material-4285F4?logo=jetpackcompose&logoColor=white)](https://developer.android.com/jetpack/compose)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 
 </div>
 
 ---
-<details>
-  <summary>Table of Contents</summary>
 
-- [About This Fork](#about-this-fork)
-- [Features](#features)
-- [Download](#download)
-- [Gestures](#gestures)
-- [System Requirements and Permissions](#system-requirements-and-permissions)
-- [Export and Import](#export-and-import)
-- [Roadmap](#roadmap)
-- [Troubleshooting and FAQ](#troubleshooting-and-faq)
-- [Bug Reporting](#bug-reporting)
-- [Screenshots](#screenshots)
-- [Working with LaTeX](#working-with-latex)
-- [App Distribution](#app-distribution)
-- [For Developers & Contributing](#for-developers--contributing)
-
-</details>
-
+Fork of [Ethran/notable](https://github.com/Ethran/notable). The upstream project is a general-purpose note-taking app for Boox devices. This fork strips it down to a single purpose: **capture handwritten thoughts and sync them into your Obsidian vault as markdown**.
 
 ---
 
-## About This Fork
-This project began as a fork of the original Notable app and has since evolved into a continuation of it. The architecture is largely the same, but many of the functions have been rewritten and expanded with a focus on practical, everyday use. Development is active when possible, guided by the principle that the app must be fast and dependable — performance comes first, and the basics need to feel right before new features are introduced. Waiting for things to load is seen as unacceptable, so responsiveness is a core priority.
+## Why this exists
 
-Future plans include exploring how AI can enhance the app, with a focus on solutions that run directly on the device. A long-term goal is local handwriting conversion to LaTeX or plain text, making advanced features available without relying on external services.
+Obsidian is great for organizing knowledge, but it assumes a keyboard. If you think with a pen — sketching, scrawling, drawing connections — there's a gap between the page and the graph. The Boox tablet is the best e-ink hardware for writing, and Notable is the best open-source app for that hardware. This fork bridges the two.
 
----
+The core idea is **atomic capture**: each page is one thought. You write it, tag it with tags from your vault, and hit save. Handwriting recognition converts your strokes to text. The result lands in your Obsidian inbox as a markdown file with frontmatter, ready to be processed in your normal workflow.
 
-## Features
-* ⚡ **Fast page turns with caching:** smooth, swift page transitions, including quick navigation to the next and previous pages.
-* ↕️ **Infinite vertical scroll:** a virtually endless canvas for notes with smooth vertical scrolling.
-* 📝 **Quick Pages:** instantly create a new page.
-* 📒 **Notebooks:** group related notes and switch easily between notebooks.
-* 📁 **Folders:** organize notes with folders.
-* 🤏 **Editor mode gestures:** [intuitive gesture controls](#gestures) to enhance editing.
-* 🌅 **Images:** add, move, scale, and remove images.
-* ➤ **Selection export:** export or share selected handwriting as PNG.
-* ✏️ **Scribble to erase:** erase content by scribbling over it (disabled by default) — contributed by [@niknal357](https://github.com/niknal357).
-* 🔄 **Auto-refresh on background change:** useful when using a tablet as a second display — see [Working with LaTeX](#working-with-latex).
+The tablet becomes a dedicated input device for your second brain. No file management, no notebooks, no folders. Just capture and sync.
 
 ---
 
-## Download
-**Download the latest stable version of the [Notable app here.](https://github.com/Ethran/notable/releases/latest)**
+## What changed from upstream
 
-Alternatively, get the latest build from the main branch via the ["next" release](https://github.com/Ethran/notable/releases/next).
+Everything here serves the Obsidian capture loop. Changes fall into three categories:
 
-Open the **Assets** section of the release and select the `.apk` file.
+### Capture workflow
+- **Atomic capture model** — every new page is a capture. No notebooks, folders, or file organization on the device. The library is a flat grid of captures.
+- **Tag UI** — collapsible toolbar at the top with tag pills pulled from your Obsidian vault (ranked by frequency and recency), text search with autocomplete. Tags flow into the markdown frontmatter on sync.
+- **Annotation boxes** — draw a box over handwritten text to mark it as a `[[wiki link]]` or `#tag`. These render as bracket/hash overlays on the canvas and get recognized inline during sync.
+- **Save & exit** — one button. Returns to the library instantly; sync happens in background.
 
-<details><summary title="Click to show/hide details">❓ Where can I see alternative/older releases?</summary><br/>
-You can go to the original olup <a href="https://github.com/olup/notable/tags" target="_blank">Releases</a> and download alternative versions of the Notable app.
-</details>
+### Handwriting recognition
+- **Onyx HWR (MyScript)** — uses the Boox firmware's built-in MyScript engine via AIDL IPC. Replaced Google ML Kit, which had poor accuracy. MyScript is significantly better, especially for short phrases and mixed content.
+- **Annotation-aware recognition** — strokes inside `[[]]` boxes become wiki links, strokes inside `#` boxes become tags. Recognition diffs full-page vs. non-annotated strokes for better accuracy (recognizing isolated short words like "pkm" in a box is harder than letting full-page context disambiguate).
+- **Line segmentation** — multi-line captures are clustered by vertical position and recognized line-by-line with sequential context feeding forward.
 
-<details><summary title="Click to show/hide details">❓ What is a 'next' release?</summary><br/>
-The "next" release is a pre-release and may contain features implemented but not yet released as part of a stable version — and sometimes experiments that may not make it into a release.
-</details>
+### Obsidian sync
+- **Markdown output** — captures sync as `.md` files to a configurable folder in your vault with YAML frontmatter (`created`, `tags`).
+- **Vault tag scanning** — parses tags from existing markdown files in your inbox folder so you can reuse your vocabulary.
+- **Background sync** — recognition and file writing happen in a coroutine after you've already navigated away. A "Syncing..." overlay shows on pages still processing.
 
----
-
-## Gestures
-Notable features intuitive gesture controls within Editor mode to optimize the editing experience:
-
-#### ☝️ 1 Finger
-* **Swipe up or down:** scroll the page.
-* **Swipe left or right:** change to the previous/next page (only available in notebooks).
-* **Double tap:** undo.
-* **Hold and drag:** select text and images.
-
-#### ✌️ 2 Fingers
-* **Swipe left or right:** show or hide the toolbar.
-* **Single tap:** switch between writing and eraser modes.
-* **Pinch:** zoom in and out.
-* **Hold and drag:** move the canvas.
-
-#### 🔲 Selection
-* **Drag:** move the selection.
-* **Double tap:** copy the selected writing.
+### Editor changes
+- **Left-edge sidebar** — all tools moved from a bottom toolbar to a vertical sidebar on the left. Pen picker and eraser flyouts appear to the right. Keeps the writing area unobstructed.
+- **Jetpack Ink API** — replaced ~200 lines of custom stroke rendering with `androidx.ink`'s `CanvasStrokeRenderer`.
+- **Fountain pen default** — with a sqrt pressure curve so light strokes are visible and heavy strokes feel natural on e-ink.
 
 ---
 
-## System Requirements and Permissions
-The app targets Onyx BOOX devices and requires Android 10 (SDK 29) or higher. Limited support for Android 9 (SDK 28) may be possible if [issue #93](https://github.com/Ethran/notable/issues/93) is resolved. Handwriting functionality is currently not available on non-Onyx devices. Enabling handwriting on other devices may be possible in the future but is not supported at the moment.
+## UX principles
 
-Storage access is required to manage notes, assets, and to observe PDF backgrounds, which need “all files access”. The database is stored at `Documents/notabledb` to simplify backups and reduce the risk of accidental deletion. Exports are written to `Documents/notable`.
+These aren't stated goals — they're patterns visible in every commit:
 
----
-
-## Export and Import
-
-The app supports the following formats:
-
-- **PDF** — export and import supported. You can also link a page to an external PDF so that changes on your computer are reflected live on the tablet (see [Working with LaTeX](#working-with-latex)).  
-- **PNG** — export supported for handwriting selections, individual pages, and entire books.  
-- **JPEG** — export supported for individual pages.  
-- **XOPP** — export and import partially supported. Only stroke and image data are preserved; tool information for strokes may be lost when files are opened and saved with [Xournal++](https://xournalpp.github.io/). Backgrounds are not exported.  
-
+- **Speed is non-negotiable.** Sync is background. Navigation is instant. Tag suggestions are cached. Nothing blocks the pen.
+- **Minimal chrome.** If it's not capture, tagging, or saving, it's removed. No folders, no notebooks, no import/export UI. The library is a grid. The editor is a page.
+- **Pen-first interaction.** Annotations are drawn, not typed. The sidebar stays out of the way. The default pen feels good at first touch.
+- **Obsidian is the system of record.** The tablet captures; Obsidian organizes. No duplicate taxonomy, no competing folder structures. Tags come from the vault and go back to the vault.
 
 ---
 
-## Roadmap
+## Setup
 
-### Near-term
-- Better selection tools:
-  - Stroke editing (color, size, etc.)
-  - Rotate and flip selection
-  - Auto‑scroll when dragging a selection near screen edges
-  - Easier selection movement, including dragging while scrolling
-- PDF improvements:
-  - Migration to a dedicated PDF library to replace the default Android renderer
-  - Allow saving annotations back to the original PDF
-  - Improved rendering and stability across devices
+### Prerequisites
+- An Onyx Boox tablet (pen input requires Onyx hardware)
+- An Obsidian vault accessible on the device (e.g. via Syncthing, Dropsync, or USB)
 
-### Planned
-- PDF annotation enhancements:
-  - Display annotations from other programs
-  - Additional quality‑of‑life tools for annotating imported PDFs
+### Install
+Build from source (see [CLAUDE.md](./CLAUDE.md) for full build instructions):
 
-### Long-term
-- Bookmarks, tags, and internal links — see [issue #52](https://github.com/Ethran/notable/issues/52), including link export to PDF.
-- Figure and text recognition — see [issue #44](https://github.com/Ethran/notable/issues/44):
-  - Searchable notes
-  - Automatic creation of tag descriptions
-  - Shape recognition
-  - Handwriting to Latex
+```bash
+./gradlew assembleDebug
+adb install -r app/build/outputs/apk/debug/app-debug.apk
+```
+
+### Configure
+1. Open Settings in the app
+2. Set your **vault path** to the Obsidian vault directory on the device
+3. Set the **inbox folder** where captures should land (e.g. `inbox/`)
+4. Start capturing
 
 ---
 
-## Troubleshooting and FAQ
-**What are “NeoTools,” and why are some disabled?**
-NeoTools are components of the Onyx E-Ink toolset, made available through Onyx’s libraries. However, certain tools are unstable and can cause crashes, so they are disabled by default to ensure better app stability. Examples include:
+## How it works
 
-* `com.onyx.android.sdk.pen.NeoCharcoalPenV2`
-* `com.onyx.android.sdk.pen.NeoMarkerPen`
-* `com.onyx.android.sdk.pen.NeoBrushPen`
+1. Tap **New Capture** in the library
+2. Write with the pen. Tag by selecting existing vault tags from the toolbar, or typing new ones.
+3. Optionally draw annotation boxes: tap `[[` or `#` in the sidebar, then draw a rectangle over text to mark it as a wiki link or tag
+4. Tap **Save & Exit**
+5. The app navigates back immediately. In the background, strokes are recognized, annotations are resolved, and a markdown file is written to your vault inbox.
+
+The resulting file looks like:
+
+```markdown
+---
+created: "[[2025-01-15]]"
+tags:
+  - meeting-notes
+  - project-alpha
+---
+
+discussed the [[API redesign]] with the team
+need to revisit #authentication flow before launch
+```
 
 ---
 
-## Bug Reporting
+## Upstream features retained
 
-If you encounter unexpected behavior, please include an app log with your report. To do this:  
-1. Navigate to the page where the issue occurs.  
-2. Reproduce the problem.  
-3. Open the page menu.  
-4. Select **“Bug Report”** and either copy the log or submit it directly.  
+This fork keeps the core Notable functionality that matters for capture:
 
-This will open a new GitHub issue in your browser with useful device information attached, which greatly helps in diagnosing and resolving the problem.  
+- Low-latency Onyx Pen SDK input (`TouchHelper` + `RawInputCallback`)
+- E-ink optimized rendering (no animations, batched refreshes, `EpdController` refresh modes)
+- Undo/redo history
+- Selection, copy, and lasso tools
+- Multiple pen types (fountain, ballpoint, marker, pencil) and sizes
+- Eraser (stroke and area modes, scribble-to-erase)
+- Image insertion
+- Zoom and pan
 
-Bug reporting with logs is currently supported only in notebooks/pages. Issues outside of writing are unlikely to require this level of detail.  
-
----
-
-
-## Screenshots
-
-<div style="display: flex; flex-wrap: wrap; gap: 10px;">
-  <img src="https://github.com/user-attachments/assets/c3054254-043b-4cce-8524-43d10505ad0b" alt="Writing on a page" width="200"/>
-  <img src="https://github.com/user-attachments/assets/c23119b7-cdae-4742-83f2-a4f39863c571" alt="Notebook overview" width="200"/>
-  <img src="https://github.com/user-attachments/assets/9f3e7012-69e4-4125-bf69-509b52e1ebaf" alt="Gestures and selection" width="200"/>
-  <img src="https://github.com/user-attachments/assets/24c8c750-eb8e-4f01-ac62-6a9f8e5f9e4f" alt="Image handling" width="200"/>
-  <img src="https://github.com/user-attachments/assets/4cdb0e74-bfce-4dba-bc21-886a5834401e" alt="Toolbar and tools" width="200"/>
-  <img src="https://github.com/user-attachments/assets/f37ec6c9-fda3-41d1-8933-940c2806c6b0" alt="Page management" width="200"/>
-  <img src="https://github.com/user-attachments/assets/e8304495-dbab-4d7a-987a-b76bf91a3a74" alt="PDF viewing" width="200"/>
-  <img src="https://github.com/user-attachments/assets/38226966-0e19-45c9-a318-a8fd9d8edf02" alt="Customization" width="200"/>
-  <img src="https://github.com/user-attachments/assets/df29f77c-94a8-4c56-bbd4-d7285654df30" alt="Settings" width="200"/>
-</div>
+Features removed from the UI: notebooks, folders, import/export, background templates, PDF annotation.
 
 ---
 
-## Working with LaTeX
+## If you're into knowledge curation
 
-The app can be used as a **primitive second monitor** for LaTeX editing — previewing compiled PDFs
-in real time on your tablet.
+This project is about getting handwritten thoughts into Obsidian. If you're looking for tools that help you *rediscover* those thoughts once they're there:
 
-### Steps:
+### [Enzyme](https://enzyme.garden) · [GitHub](https://github.com/jshph/enzyme)
 
-- Connect your device to your computer via USB (MTP).
-- Set up automatic copying of the compiled PDF to the tablet:
-  <details>
-  <summary>Example using a custom <code>latexmkrc</code>:</summary>
+An AI layer for Obsidian that surfaces connections between your notes — the ones you forgot you made. Semantic search over your vault, concept-level linking, and pattern discovery across everything you've written. < 40 MB bundle, 10x faster initialization than QMD. Lightweight enough to run alongside your vault without friction.
 
-  ```perl
-  $pdf_mode = 1;
-  $out_dir = 'build';
+### [Aside](https://github.com/jshph/aside)
 
-  sub postprocess {
-      system("cp build/main.pdf '/run/user/1000/gvfs/mtp:host=DEVICE/Internal shared storage/Documents/Filename.pdf'");
-  }
-
-  END {
-      postprocess();
-  }
-  ```
-  
-  It was also tested with `adb push`, instead of `cp`.
-
-  </details>
-- Compile, and test if it copies the file to the tablet.
-- Import your compiled PDF document into Notable, and choose to observe the PDF file.
-
-> After each recompilation, Notable will detect the updated PDF and automatically refresh the view.
+Local-first meeting memos with timestamp-synced transcription. Record a conversation, get a structured note aligned to your audio timeline. Everything stays on your machine.
 
 ---
 
-## App Distribution
-Notable is not distributed on Google Play or F-Droid. Official builds are provided exclusively via [GitHub Releases](https://github.com/Ethran/notable/releases).
+## Credits
+
+- [Ethran/notable](https://github.com/Ethran/notable) — the actively maintained fork this builds on
+- [olup/notable](https://github.com/olup/notable) — the original project
+- Onyx Pen SDK and MyScript HWR engine (via Boox firmware)
+- [Jetpack Ink](https://developer.android.com/jetpack/androidx/releases/ink) for stroke rendering
 
 ---
 
-## For Developers & Contributing
+## License
 
-- Project file layout: see [docs/file-structure.md](./docs/file-structure.md)  
-- Data model and stroke encoding: see [docs/database-structure.md](./docs/database-structure.md)  
-- Additional documentation will be added as needed  
-  Note: These documents were AI-generated and lightly verified; refer to the code for the authoritative source.
-
-### Development Notes
-
-- Edit the `DEBUG_STORE_FILE` in `/app/gradle.properties` to point to your local keystore file. This is typically located in the `.android` directory.
-- To debug on a BOOX device, enable developer mode. You can follow [this guide](https://imgur.com/a/i1kb2UQ).
-
-Feel free to open issues or submit pull requests. I appreciate your help!
-
----
-
-<!-- MARKDOWN LINKS -->
-[logo]: https://github.com/Ethran/notable/blob/main/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png?raw=true "Notable Logo"
-[contributors-shield]: https://img.shields.io/github/contributors/Ethran/notable.svg?style=for-the-badge
-[contributors-url]: https://github.com/Ethran/notable/graphs/contributors
-[forks-shield]: https://img.shields.io/github/forks/Ethran/notable.svg?style=for-the-badge
-[forks-url]: https://github.com/Ethran/notable/network/members
-[stars-shield]: https://img.shields.io/github/stars/Ethran/notable.svg?style=for-the-badge
-[stars-url]: https://github.com/Ethran/notable/stargazers
-[issues-shield]: https://img.shields.io/github/issues/Ethran/notable.svg?style=for-the-badge
-[issues-url]: https://github.com/Ethran/notable/issues
-[license-shield]: https://img.shields.io/github/license/Ethran/notable.svg?style=for-the-badge
-
-[license-url]: https://github.com/Ethran/notable/blob/main/LICENSE
-[download-shield]: https://img.shields.io/github/v/release/Ethran/notable?style=for-the-badge&label=⬇️%20Download
-[download-url]: https://github.com/Ethran/notable/releases/latest
-[downloads-shield]: https://img.shields.io/github/downloads/Ethran/notable/total?style=for-the-badge&color=47c219&logo=cloud-download
-[downloads-url]: https://github.com/Ethran/notable/releases/latest
-
-[discord-shield]: https://img.shields.io/badge/Discord-Join%20Chat-7289DA?style=for-the-badge&logo=discord
-[discord-url]: https://discord.gg/rvNHgaDmN2
-[kofi-shield]: https://img.shields.io/badge/Buy%20Me%20a%20Coffee-ko--fi-ff5f5f?style=for-the-badge&logo=ko-fi&logoColor=white
-[kofi-url]: https://ko-fi.com/rethran
-
-[sponsor-shield]: https://img.shields.io/badge/Sponsor-GitHub-%23ea4aaa?style=for-the-badge&logo=githubsponsors&logoColor=white
-[sponsor-url]: https://github.com/sponsors/rethran
-
-[docs-url]: https://github.com/Ethran/notable
-[bug-url]: https://github.com/Ethran/notable/issues/new?template=bug_report.md
-[feature-url]: https://github.com/Ethran/notable/issues/new?labels=enhancement&template=feature-request---.md
-[bug-shield]: https://img.shields.io/badge/🐛%20Report%20Bug-red?style=for-the-badge
-[feature-shield]: https://img.shields.io/badge/💡%20Request%20Feature-blueviolet?style=for-the-badge
+[MIT](./LICENSE)
