@@ -1,10 +1,12 @@
 package com.ethran.notable.editor.state
 
 import android.graphics.Rect
+import com.ethran.notable.data.db.Annotation
 import com.ethran.notable.data.db.Image
 import com.ethran.notable.data.db.Stroke
 import com.ethran.notable.editor.canvas.CanvasEventBus
 import com.ethran.notable.editor.PageView
+import com.ethran.notable.editor.utils.annotationBounds
 import com.ethran.notable.editor.utils.imageBoundsInt
 import com.ethran.notable.editor.utils.strokeBounds
 import com.ethran.notable.ui.SnackConf
@@ -18,6 +20,8 @@ sealed class Operation {
     data class AddStroke(val strokes: List<Stroke>) : Operation()
     data class AddImage(val images: List<Image>) : Operation()
     data class DeleteImage(val imageIds: List<String>) : Operation()
+    data class AddAnnotation(val annotations: List<Annotation>) : Operation()
+    data class DeleteAnnotation(val annotationIds: List<String>) : Operation()
 }
 
 typealias OperationBlock = List<Operation>
@@ -103,6 +107,21 @@ class History(pageView: PageView) {
                 val images = pageModel.getImages(operation.imageIds).filterNotNull()
                 pageModel.removeImages(operation.imageIds)
                 return Operation.AddImage(images = images) to imageBoundsInt(images)
+            }
+
+            is Operation.AddAnnotation -> {
+                pageModel.addAnnotations(operation.annotations)
+                return Operation.DeleteAnnotation(annotationIds = operation.annotations.map { it.id }) to annotationBounds(
+                    operation.annotations
+                )
+            }
+
+            is Operation.DeleteAnnotation -> {
+                val annotations = operation.annotationIds.mapNotNull { id ->
+                    pageModel.annotations.find { it.id == id }
+                }
+                pageModel.removeAnnotations(operation.annotationIds)
+                return Operation.AddAnnotation(annotations = annotations) to annotationBounds(annotations)
             }
         }
     }

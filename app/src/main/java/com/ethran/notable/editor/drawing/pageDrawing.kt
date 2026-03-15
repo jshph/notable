@@ -14,6 +14,8 @@ import androidx.core.graphics.toRect
 import androidx.core.graphics.withClip
 import androidx.core.net.toUri
 import com.ethran.notable.data.datastore.GlobalAppSettings
+import com.ethran.notable.data.db.Annotation
+import com.ethran.notable.data.db.AnnotationType
 import com.ethran.notable.data.db.Image
 import com.ethran.notable.data.db.getBackgroundType
 import com.ethran.notable.data.model.BackgroundType
@@ -27,6 +29,138 @@ import com.ethran.notable.ui.showHint
 import io.shipbook.shipbooksdk.ShipBook
 
 private val pageDrawingLog = ShipBook.getLogger("PageDrawingLog")
+
+// Annotation overlay paints
+private val wikiLinkFillPaint = Paint().apply {
+    color = Color.argb(50, 0, 100, 255) // very light blue wash
+    style = Paint.Style.FILL
+}
+private val wikiLinkBracketPaint = Paint().apply {
+    color = Color.argb(200, 0, 80, 220) // blue brackets
+    style = Paint.Style.FILL
+    isAntiAlias = true
+    typeface = android.graphics.Typeface.create(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD)
+}
+private val tagFillPaint = Paint().apply {
+    color = Color.argb(50, 0, 180, 0) // very light green wash
+    style = Paint.Style.FILL
+}
+private val tagHashPaint = Paint().apply {
+    color = Color.argb(200, 0, 150, 0) // green hash symbol
+    style = Paint.Style.FILL
+    isAntiAlias = true
+    typeface = android.graphics.Typeface.create(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD)
+}
+private val annotationUnderlinePaint = Paint().apply {
+    style = Paint.Style.STROKE
+    strokeWidth = 3f
+    isAntiAlias = true
+}
+
+/**
+ * Returns the visual bounding rect of an annotation in page coordinates,
+ * including the bracket/hash glyphs that extend beyond the annotation's data bounds.
+ */
+fun annotationVisualBounds(annotation: Annotation): Rect {
+    val boxHeight = annotation.height
+    val padding = boxHeight * 0.15f
+
+    val expandLeft: Float
+    val expandRight: Float
+
+    if (annotation.type == AnnotationType.WIKILINK.name) {
+        val bracketSize = boxHeight * 0.55f
+        wikiLinkBracketPaint.textSize = bracketSize
+        val bracketWidth = wikiLinkBracketPaint.measureText("[[")
+        val bracketGap = padding * 0.5f
+        expandLeft = bracketWidth + bracketGap
+        expandRight = bracketWidth + bracketGap
+    } else {
+        val hashSize = boxHeight * 0.65f
+        tagHashPaint.textSize = hashSize
+        val hashWidth = tagHashPaint.measureText("#")
+        val hashGap = padding * 0.6f
+        expandLeft = hashWidth + hashGap
+        expandRight = padding
+    }
+
+    return Rect(
+        (annotation.x - expandLeft).toInt(),
+        (annotation.y - padding).toInt(),
+        (annotation.x + annotation.width + expandRight).toInt(),
+        (annotation.y + annotation.height + padding).toInt()
+    )
+}
+
+fun drawAnnotation(canvas: Canvas, annotation: Annotation, offset: Offset) {
+    val rect = RectF(
+        annotation.x + offset.x,
+        annotation.y + offset.y,
+        annotation.x + annotation.width + offset.x,
+        annotation.y + annotation.height + offset.y
+    )
+    val boxHeight = rect.height()
+    val padding = boxHeight * 0.15f
+
+    if (annotation.type == AnnotationType.WIKILINK.name) {
+        // Size brackets proportional to annotation height
+        val bracketSize = boxHeight * 0.55f
+        wikiLinkBracketPaint.textSize = bracketSize
+
+        val bracketWidth = wikiLinkBracketPaint.measureText("[[")
+        val bracketGap = padding * 0.5f
+
+        // Expanded rect includes brackets
+        val expandedRect = RectF(
+            rect.left - bracketWidth - bracketGap,
+            rect.top - padding,
+            rect.right + bracketWidth + bracketGap,
+            rect.bottom + padding
+        )
+
+        // Light fill over the whole area
+        val cornerRadius = boxHeight * 0.15f
+        canvas.drawRoundRect(expandedRect, cornerRadius, cornerRadius, wikiLinkFillPaint)
+
+        // Draw [[ on the left
+        val textY = rect.centerY() + bracketSize * 0.35f
+        canvas.drawText("[[", expandedRect.left + bracketGap * 0.5f, textY, wikiLinkBracketPaint)
+
+        // Draw ]] on the right
+        canvas.drawText("]]", rect.right + bracketGap * 0.5f, textY, wikiLinkBracketPaint)
+
+        // Subtle underline under the handwritten content
+        annotationUnderlinePaint.color = Color.argb(120, 0, 80, 220)
+        canvas.drawLine(rect.left, rect.bottom + padding * 0.3f, rect.right, rect.bottom + padding * 0.3f, annotationUnderlinePaint)
+    } else {
+        // TAG: draw # prefix
+        val hashSize = boxHeight * 0.65f
+        tagHashPaint.textSize = hashSize
+
+        val hashWidth = tagHashPaint.measureText("#")
+        val hashGap = padding * 0.6f
+
+        // Expanded rect includes # prefix
+        val expandedRect = RectF(
+            rect.left - hashWidth - hashGap,
+            rect.top - padding,
+            rect.right + padding,
+            rect.bottom + padding
+        )
+
+        // Light fill over the whole area
+        val cornerRadius = boxHeight * 0.15f
+        canvas.drawRoundRect(expandedRect, cornerRadius, cornerRadius, tagFillPaint)
+
+        // Draw # to the left
+        val textY = rect.centerY() + hashSize * 0.35f
+        canvas.drawText("#", expandedRect.left + hashGap * 0.3f, textY, tagHashPaint)
+
+        // Subtle underline under the handwritten content
+        annotationUnderlinePaint.color = Color.argb(120, 0, 150, 0)
+        canvas.drawLine(rect.left, rect.bottom + padding * 0.3f, rect.right, rect.bottom + padding * 0.3f, annotationUnderlinePaint)
+    }
+}
 
 
 /**
@@ -175,6 +309,16 @@ fun drawOnCanvasFromPage(
         } catch (e: Exception) {
             pageDrawingLog.e("PageView.kt: Drawing strokes failed: ${e.message}", e)
             showHint("Error drawing strokes", page.coroutineScope)
+        }
+        // Draw annotation overlays on top of strokes
+        try {
+            page.annotations.forEach { annotation ->
+                val visualBounds = annotationVisualBounds(annotation)
+                if (!visualBounds.intersect(pageArea)) return@forEach
+                drawAnnotation(this, annotation, -page.scroll)
+            }
+        } catch (e: Exception) {
+            pageDrawingLog.e("Drawing annotations failed: ${e.message}", e)
         }
     }
 }
