@@ -106,10 +106,8 @@ class DrawCanvas(
         val surfaceCallback: SurfaceHolder.Callback = object : SurfaceHolder.Callback {
             override fun surfaceCreated(holder: SurfaceHolder) {
                 log.i("surface created $holder")
-                // set up the drawing surface
+                // set up the drawing surface (also sets pen/stroke style after setup completes)
                 inputHandler.updateActiveSurface()
-                // Restore the correct stroke size and style.
-                inputHandler.updatePenAndStroke()
             }
 
             override fun surfaceChanged(

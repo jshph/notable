@@ -124,12 +124,9 @@ fun drawFountainPenStroke(
         path.quadTo(prePoint.x, prePoint.y, point.x, point.y)
         prePoint.x = point.x
         prePoint.y = point.y
+        val normalizedPressure = kotlin.math.sqrt((point.pressure / pressure).coerceIn(0f, 1f))
         copyPaint.strokeWidth =
-            (1.5f - strokeSize / 40f) * strokeSize * (1 - cos(0.5f * 3.14f * point.pressure / pressure))
-        point.tiltX
-        point.tiltY
-        point.timestamp
-
+            (1.5f - strokeSize / 40f) * strokeSize * (1 - cos(0.5f * 3.14f * normalizedPressure))
         canvas.drawPath(path, copyPaint)
         path.reset()
         path.moveTo(point.x, point.y)
