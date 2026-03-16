@@ -51,6 +51,16 @@ private val tagHashPaint = Paint().apply {
     isAntiAlias = true
     typeface = android.graphics.Typeface.create(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD)
 }
+private val titleFillPaint = Paint().apply {
+    color = Color.argb(50, 255, 140, 0) // light orange wash
+    style = Paint.Style.FILL
+}
+private val titleGlyphPaint = Paint().apply {
+    color = Color.argb(200, 180, 80, 0) // orange-brown "T"
+    style = Paint.Style.FILL
+    isAntiAlias = true
+    typeface = android.graphics.Typeface.create(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD)
+}
 private val annotationUnderlinePaint = Paint().apply {
     style = Paint.Style.STROKE
     strokeWidth = 3f
@@ -75,6 +85,13 @@ fun annotationVisualBounds(annotation: Annotation): Rect {
         val bracketGap = padding * 0.5f
         expandLeft = bracketWidth + bracketGap
         expandRight = bracketWidth + bracketGap
+    } else if (annotation.type == AnnotationType.TITLE.name) {
+        val titleSize = boxHeight * 0.65f
+        titleGlyphPaint.textSize = titleSize
+        val titleWidth = titleGlyphPaint.measureText("T")
+        val titleGap = padding * 0.6f
+        expandLeft = titleWidth + titleGap
+        expandRight = padding
     } else {
         val hashSize = boxHeight * 0.65f
         tagHashPaint.textSize = hashSize
@@ -131,6 +148,29 @@ fun drawAnnotation(canvas: Canvas, annotation: Annotation, offset: Offset) {
 
         // Subtle underline under the handwritten content
         annotationUnderlinePaint.color = Color.argb(120, 0, 80, 220)
+        canvas.drawLine(rect.left, rect.bottom + padding * 0.3f, rect.right, rect.bottom + padding * 0.3f, annotationUnderlinePaint)
+    } else if (annotation.type == AnnotationType.TITLE.name) {
+        // TITLE: draw "T" prefix with orange styling
+        val titleSize = boxHeight * 0.65f
+        titleGlyphPaint.textSize = titleSize
+
+        val titleWidth = titleGlyphPaint.measureText("T")
+        val titleGap = padding * 0.6f
+
+        val expandedRect = RectF(
+            rect.left - titleWidth - titleGap,
+            rect.top - padding,
+            rect.right + padding,
+            rect.bottom + padding
+        )
+
+        val cornerRadius = boxHeight * 0.15f
+        canvas.drawRoundRect(expandedRect, cornerRadius, cornerRadius, titleFillPaint)
+
+        val textY = rect.centerY() + titleSize * 0.35f
+        canvas.drawText("T", expandedRect.left + titleGap * 0.3f, textY, titleGlyphPaint)
+
+        annotationUnderlinePaint.color = Color.argb(120, 180, 80, 0)
         canvas.drawLine(rect.left, rect.bottom + padding * 0.3f, rect.right, rect.bottom + padding * 0.3f, annotationUnderlinePaint)
     } else {
         // TAG: draw # prefix

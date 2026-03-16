@@ -282,6 +282,12 @@ private fun InboxCaptureSettings(
             onValueChange = { onSettingsChange(settings.copy(hwrLanguage = it)) },
             labelMaxLines = 1
         )
+
+        SettingToggleRow(
+            label = "Include timestamp in filename",
+            value = settings.hwrFilenameIncludeTimestamp,
+            onToggle = { onSettingsChange(settings.copy(hwrFilenameIncludeTimestamp = it)) }
+        )
     }
 
     SettingsDivider()

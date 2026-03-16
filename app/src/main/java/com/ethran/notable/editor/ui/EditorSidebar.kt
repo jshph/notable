@@ -368,6 +368,21 @@ fun EditorSidebar(
             }
         )
 
+        // Title
+        SidebarTextButton(
+            text = "T",
+            contentDescription = "Title",
+            isSelected = state.annotationMode == AnnotationMode.Title,
+            onClick = {
+                state.annotationMode = if (state.annotationMode == AnnotationMode.Title)
+                    AnnotationMode.None else AnnotationMode.Title
+                if (state.annotationMode != AnnotationMode.None) state.mode = Mode.Draw
+                isPenPickerOpen = false
+                isEraserMenuOpen = false
+                refreshSidebar()
+            }
+        )
+
         SidebarDivider()
 
         // --- Utilities ---

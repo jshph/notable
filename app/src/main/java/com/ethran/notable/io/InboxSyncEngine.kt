@@ -57,6 +57,29 @@ object InboxSyncEngine {
 
         ensureRecognizer(GlobalAppSettings.current.hwrLanguage)
 
+        // Separate TITLE annotation from body annotations
+        val titleAnnotation = annotations.firstOrNull { it.type == AnnotationType.TITLE.name }
+        val bodyAnnotations = annotations.filter { it.type != AnnotationType.TITLE.name }
+
+        // Recognize title strokes separately and save to page
+        var noteTitle: String? = null
+        if (titleAnnotation != null) {
+            val titleRect = RectF(
+                titleAnnotation.x, titleAnnotation.y,
+                titleAnnotation.x + titleAnnotation.width,
+                titleAnnotation.y + titleAnnotation.height
+            )
+            val titleStrokes = findStrokesInRect(allStrokes, titleRect)
+            if (titleStrokes.isNotEmpty()) {
+                val raw = recognizeStrokes(titleStrokes)
+                noteTitle = raw.replace(Regex("\\s*[\\r\\n]+\\s*"), " ").trim().ifBlank { null }
+                log.i("Recognized title: '$noteTitle'")
+            }
+        }
+        if (noteTitle != null) {
+            appRepository.pageRepository.update(page.copy(title = noteTitle))
+        }
+
         // 1. Recognize ALL strokes together to preserve natural text flow
         var fullText = if (allStrokes.isNotEmpty()) {
             log.i("Recognizing all ${allStrokes.size} strokes")
@@ -69,8 +92,8 @@ object InboxSyncEngine {
         // 2. Find annotation text by diffing full recognition vs non-annotation recognition.
         //    Falls back to per-annotation recognition if the diff produces a count mismatch
         //    (which happens when removing strokes changes HWR context enough to alter other words).
-        if (annotations.isNotEmpty()) {
-            val sortedAnnotations = annotations.sortedWith(compareBy({ it.y }, { it.x }))
+        if (bodyAnnotations.isNotEmpty()) {
+            val sortedAnnotations = bodyAnnotations.sortedWith(compareBy({ it.y }, { it.x }))
 
             // Collect stroke IDs that fall inside any annotation box
             val annotationStrokeIds = mutableSetOf<String>()
@@ -139,10 +162,10 @@ object InboxSyncEngine {
         val finalContent = fullText
 
         val createdDate = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(page.createdAt)
-        val markdown = generateMarkdown(createdDate, tags, finalContent)
+        val markdown = generateMarkdown(createdDate, tags, finalContent, noteTitle)
 
         val inboxPath = GlobalAppSettings.current.obsidianInboxPath
-        writeMarkdownFile(markdown, page.createdAt, inboxPath)
+        writeMarkdownFile(markdown, page.createdAt, inboxPath, noteTitle)
 
         log.i("Inbox sync complete for page $pageId")
     }
@@ -390,10 +413,12 @@ object InboxSyncEngine {
     private fun generateMarkdown(
         createdDate: String,
         tags: List<String>,
-        content: String
+        content: String,
+        title: String? = null
     ): String {
         val sb = StringBuilder()
         sb.appendLine("---")
+        if (title != null) sb.appendLine("title: \"$title\"")
         sb.appendLine("created: \"[[$createdDate]]\"")
         if (tags.isNotEmpty()) {
             sb.appendLine("tags:")
@@ -405,9 +430,20 @@ object InboxSyncEngine {
         return sb.toString()
     }
 
-    private fun writeMarkdownFile(markdown: String, createdAt: Date, inboxPath: String) {
+    private fun writeMarkdownFile(markdown: String, createdAt: Date, inboxPath: String, title: String? = null) {
+        val includeTimestamp = GlobalAppSettings.current.hwrFilenameIncludeTimestamp
         val timestamp = SimpleDateFormat("yyyy-MM-dd-HH-mm-ss", Locale.US).format(createdAt)
-        val fileName = "$timestamp.md"
+        val slug = title?.trim()
+            ?.lowercase(Locale.US)
+            ?.replace(Regex("[^a-z0-9]+"), "-")
+            ?.trim('-')
+            ?.take(60)
+        val fileName = when {
+            includeTimestamp && slug != null -> "$timestamp-$slug.md"
+            includeTimestamp -> "$timestamp.md"
+            slug != null -> "$slug.md"
+            else -> "$timestamp.md"
+        }
 
         val dir = if (inboxPath.startsWith("/")) {
             File(inboxPath)

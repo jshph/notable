@@ -36,7 +36,8 @@ data class Page(
     @ColumnInfo(defaultValue = "blank") val background: String = "blank", // path or native subtype
     @ColumnInfo(defaultValue = "native") val backgroundType: String = "native", // image, imageRepeating, coverImage, native
     @ColumnInfo(index = true) val parentFolderId: String? = null,
-    val createdAt: Date = Date(), val updatedAt: Date = Date()
+    val createdAt: Date = Date(), val updatedAt: Date = Date(),
+    val title: String? = null
 )
 
 data class PageWithStrokes(
