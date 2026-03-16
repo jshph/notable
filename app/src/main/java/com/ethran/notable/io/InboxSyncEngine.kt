@@ -29,15 +29,9 @@ private val log = ShipBook.getLogger("InboxSyncEngine")
 
 object InboxSyncEngine {
 
-    private val modelIdentifier =
-        DigitalInkRecognitionModelIdentifier.fromLanguageTag("en-US")
-    private val model =
-        modelIdentifier?.let { DigitalInkRecognitionModel.builder(it).build() }
-    private val recognizer = model?.let {
-        DigitalInkRecognition.getClient(
-            DigitalInkRecognizerOptions.builder(it).build()
-        )
-    }
+    @Volatile private var currentLanguage: String? = null
+    private var recognizer: com.google.mlkit.vision.digitalink.recognition.DigitalInkRecognizer? = null
+    private var currentModel: DigitalInkRecognitionModel? = null
 
     /**
      * Sync an inbox page to Obsidian. Tags come from the UI (pill selection),
@@ -61,7 +55,30 @@ object InboxSyncEngine {
             return
         }
 
-        ensureModelDownloaded()
+        ensureRecognizer(GlobalAppSettings.current.hwrLanguage)
+
+        // Separate TITLE annotation from body annotations
+        val titleAnnotation = annotations.firstOrNull { it.type == AnnotationType.TITLE.name }
+        val bodyAnnotations = annotations.filter { it.type != AnnotationType.TITLE.name }
+
+        // Recognize title strokes separately and save to page
+        var noteTitle: String? = null
+        if (titleAnnotation != null) {
+            val titleRect = RectF(
+                titleAnnotation.x, titleAnnotation.y,
+                titleAnnotation.x + titleAnnotation.width,
+                titleAnnotation.y + titleAnnotation.height
+            )
+            val titleStrokes = findStrokesInRect(allStrokes, titleRect)
+            if (titleStrokes.isNotEmpty()) {
+                val raw = recognizeStrokes(titleStrokes)
+                noteTitle = raw.replace(Regex("\\s*[\\r\\n]+\\s*"), " ").trim().ifBlank { null }
+                log.i("Recognized title: '$noteTitle'")
+            }
+        }
+        if (noteTitle != null) {
+            appRepository.pageRepository.update(page.copy(title = noteTitle))
+        }
 
         // 1. Recognize ALL strokes together to preserve natural text flow
         var fullText = if (allStrokes.isNotEmpty()) {
@@ -75,8 +92,8 @@ object InboxSyncEngine {
         // 2. Find annotation text by diffing full recognition vs non-annotation recognition.
         //    Falls back to per-annotation recognition if the diff produces a count mismatch
         //    (which happens when removing strokes changes HWR context enough to alter other words).
-        if (annotations.isNotEmpty()) {
-            val sortedAnnotations = annotations.sortedWith(compareBy({ it.y }, { it.x }))
+        if (bodyAnnotations.isNotEmpty()) {
+            val sortedAnnotations = bodyAnnotations.sortedWith(compareBy({ it.y }, { it.x }))
 
             // Collect stroke IDs that fall inside any annotation box
             val annotationStrokeIds = mutableSetOf<String>()
@@ -145,33 +162,44 @@ object InboxSyncEngine {
         val finalContent = fullText
 
         val createdDate = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(page.createdAt)
-        val markdown = generateMarkdown(createdDate, tags, finalContent)
+        val markdown = generateMarkdown(createdDate, tags, finalContent, noteTitle)
 
         val inboxPath = GlobalAppSettings.current.obsidianInboxPath
-        writeMarkdownFile(markdown, page.createdAt, inboxPath)
+        writeMarkdownFile(markdown, page.createdAt, inboxPath, noteTitle)
 
         log.i("Inbox sync complete for page $pageId")
     }
 
-    private suspend fun ensureModelDownloaded() {
-        val m = model ?: throw IllegalStateException("ML Kit model identifier not found")
+    private suspend fun ensureRecognizer(language: String) {
+        if (language == currentLanguage && recognizer != null) return
+
+        val modelIdentifier = DigitalInkRecognitionModelIdentifier.fromLanguageTag(language)
+            ?: throw IllegalStateException("Unsupported HWR language: $language")
+        val model = DigitalInkRecognitionModel.builder(modelIdentifier).build()
         val manager = RemoteModelManager.getInstance()
 
         val isDownloaded = suspendCancellableCoroutine<Boolean> { cont ->
-            manager.isModelDownloaded(m)
+            manager.isModelDownloaded(model)
                 .addOnSuccessListener { cont.resume(it) }
                 .addOnFailureListener { cont.resumeWithException(it) }
         }
 
         if (!isDownloaded) {
-            log.i("Downloading ML Kit model...")
+            log.i("Downloading ML Kit model for $language...")
             suspendCancellableCoroutine<Void?> { cont ->
-                manager.download(m, DownloadConditions.Builder().build())
+                manager.download(model, DownloadConditions.Builder().build())
                     .addOnSuccessListener { cont.resume(null) }
                     .addOnFailureListener { cont.resumeWithException(it) }
             }
             log.i("Model downloaded")
         }
+
+        recognizer?.close()
+        currentModel = model
+        recognizer = DigitalInkRecognition.getClient(
+            DigitalInkRecognizerOptions.builder(model).build()
+        )
+        currentLanguage = language
     }
 
     /**
@@ -180,7 +208,7 @@ object InboxSyncEngine {
      */
     private suspend fun recognizeStrokes(strokes: List<Stroke>): String {
         val rec = recognizer
-            ?: throw IllegalStateException("ML Kit recognizer not initialized")
+            ?: throw IllegalStateException("ML Kit recognizer not initialized — call ensureRecognizer first")
 
         val lines = segmentIntoLines(strokes)
         log.i("Segmented ${strokes.size} strokes into ${lines.size} lines")
@@ -385,10 +413,12 @@ object InboxSyncEngine {
     private fun generateMarkdown(
         createdDate: String,
         tags: List<String>,
-        content: String
+        content: String,
+        title: String? = null
     ): String {
         val sb = StringBuilder()
         sb.appendLine("---")
+        if (title != null) sb.appendLine("title: \"$title\"")
         sb.appendLine("created: \"[[$createdDate]]\"")
         if (tags.isNotEmpty()) {
             sb.appendLine("tags:")
@@ -400,9 +430,20 @@ object InboxSyncEngine {
         return sb.toString()
     }
 
-    private fun writeMarkdownFile(markdown: String, createdAt: Date, inboxPath: String) {
+    private fun writeMarkdownFile(markdown: String, createdAt: Date, inboxPath: String, title: String? = null) {
+        val includeTimestamp = GlobalAppSettings.current.hwrFilenameIncludeTimestamp
         val timestamp = SimpleDateFormat("yyyy-MM-dd-HH-mm-ss", Locale.US).format(createdAt)
-        val fileName = "$timestamp.md"
+        val slug = title?.trim()
+            ?.lowercase(Locale.US)
+            ?.replace(Regex("[^a-z0-9]+"), "-")
+            ?.trim('-')
+            ?.take(60)
+        val fileName = when {
+            includeTimestamp && slug != null -> "$timestamp-$slug.md"
+            includeTimestamp -> "$timestamp.md"
+            slug != null -> "$slug.md"
+            else -> "$timestamp.md"
+        }
 
         val dir = if (inboxPath.startsWith("/")) {
             File(inboxPath)

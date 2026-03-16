@@ -214,6 +214,7 @@ fun LibraryContent(
             items(pages) { page ->
                 var isPageSelected by remember { mutableStateOf(false) }
                 val isSyncing = page.id in SyncState.syncingPageIds
+                Column {
                 Box {
                     PagePreview(
                         modifier = Modifier
@@ -246,6 +247,16 @@ fun LibraryContent(
                         onClose = { isPageSelected = false }
                     )
                 }
+                if (page.title != null) {
+                    Text(
+                        text = page.title,
+                        style = androidx.compose.material.MaterialTheme.typography.caption,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                    )
+                }
+                } // end Column
             }
         }
     }

@@ -51,6 +51,8 @@ data class AppSettings(
 
     // Inbox Capture
     val obsidianInboxPath: String = "Documents/primary/inbox",
+    val hwrLanguage: String = "en-US",
+    val hwrFilenameIncludeTimestamp: Boolean = true,
 
     // Debug
     val showWelcome: Boolean = true,

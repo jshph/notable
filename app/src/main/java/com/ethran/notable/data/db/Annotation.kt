@@ -14,7 +14,8 @@ import javax.inject.Inject
 
 enum class AnnotationType {
     WIKILINK,
-    TAG
+    TAG,
+    TITLE
 }
 
 @Entity(

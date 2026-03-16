@@ -20,7 +20,7 @@ enum class Mode {
 }
 
 enum class AnnotationMode {
-    None, WikiLink, Tag
+    None, WikiLink, Tag, Title
 }
 
 @Stable

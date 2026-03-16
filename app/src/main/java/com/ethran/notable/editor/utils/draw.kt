@@ -63,6 +63,7 @@ fun handleAnnotation(
         val type = when (annotationMode) {
             AnnotationMode.WikiLink -> AnnotationType.WIKILINK.name
             AnnotationMode.Tag -> AnnotationType.TAG.name
+            AnnotationMode.Title -> AnnotationType.TITLE.name
             else -> return null
         }
 
