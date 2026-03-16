@@ -51,6 +51,7 @@ data class AppSettings(
 
     // Inbox Capture
     val obsidianInboxPath: String = "Documents/primary/inbox",
+    val hwrLanguage: String = "en-US",
 
     // Debug
     val showWelcome: Boolean = true,

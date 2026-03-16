@@ -247,6 +247,41 @@ private fun InboxCaptureSettings(
             style = MaterialTheme.typography.caption,
             color = Color.Gray
         )
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        Text(
+            "Handwriting recognition language",
+            style = MaterialTheme.typography.body1,
+            fontWeight = FontWeight.Medium
+        )
+
+        Spacer(modifier = Modifier.height(4.dp))
+
+        val hwrLanguages = listOf(
+            "en-US" to "English (US)",
+            "en-GB" to "English (UK)",
+            "fr-FR" to "French",
+            "de-DE" to "German",
+            "es-ES" to "Spanish",
+            "it-IT" to "Italian",
+            "pt-BR" to "Portuguese (Brazil)",
+            "pt-PT" to "Portuguese (Portugal)",
+            "nl-NL" to "Dutch",
+            "ru-RU" to "Russian",
+            "zh-CN" to "Chinese (Simplified)",
+            "zh-TW" to "Chinese (Traditional)",
+            "ja-JP" to "Japanese",
+            "ko-KR" to "Korean",
+            "ar-SA" to "Arabic",
+        )
+        SelectorRow(
+            label = "",
+            options = hwrLanguages,
+            value = settings.hwrLanguage,
+            onValueChange = { onSettingsChange(settings.copy(hwrLanguage = it)) },
+            labelMaxLines = 1
+        )
     }
 
     SettingsDivider()

@@ -29,15 +29,9 @@ private val log = ShipBook.getLogger("InboxSyncEngine")
 
 object InboxSyncEngine {
 
-    private val modelIdentifier =
-        DigitalInkRecognitionModelIdentifier.fromLanguageTag("en-US")
-    private val model =
-        modelIdentifier?.let { DigitalInkRecognitionModel.builder(it).build() }
-    private val recognizer = model?.let {
-        DigitalInkRecognition.getClient(
-            DigitalInkRecognizerOptions.builder(it).build()
-        )
-    }
+    @Volatile private var currentLanguage: String? = null
+    private var recognizer: com.google.mlkit.vision.digitalink.recognition.DigitalInkRecognizer? = null
+    private var currentModel: DigitalInkRecognitionModel? = null
 
     /**
      * Sync an inbox page to Obsidian. Tags come from the UI (pill selection),
@@ -61,7 +55,7 @@ object InboxSyncEngine {
             return
         }
 
-        ensureModelDownloaded()
+        ensureRecognizer(GlobalAppSettings.current.hwrLanguage)
 
         // 1. Recognize ALL strokes together to preserve natural text flow
         var fullText = if (allStrokes.isNotEmpty()) {
@@ -153,25 +147,36 @@ object InboxSyncEngine {
         log.i("Inbox sync complete for page $pageId")
     }
 
-    private suspend fun ensureModelDownloaded() {
-        val m = model ?: throw IllegalStateException("ML Kit model identifier not found")
+    private suspend fun ensureRecognizer(language: String) {
+        if (language == currentLanguage && recognizer != null) return
+
+        val modelIdentifier = DigitalInkRecognitionModelIdentifier.fromLanguageTag(language)
+            ?: throw IllegalStateException("Unsupported HWR language: $language")
+        val model = DigitalInkRecognitionModel.builder(modelIdentifier).build()
         val manager = RemoteModelManager.getInstance()
 
         val isDownloaded = suspendCancellableCoroutine<Boolean> { cont ->
-            manager.isModelDownloaded(m)
+            manager.isModelDownloaded(model)
                 .addOnSuccessListener { cont.resume(it) }
                 .addOnFailureListener { cont.resumeWithException(it) }
         }
 
         if (!isDownloaded) {
-            log.i("Downloading ML Kit model...")
+            log.i("Downloading ML Kit model for $language...")
             suspendCancellableCoroutine<Void?> { cont ->
-                manager.download(m, DownloadConditions.Builder().build())
+                manager.download(model, DownloadConditions.Builder().build())
                     .addOnSuccessListener { cont.resume(null) }
                     .addOnFailureListener { cont.resumeWithException(it) }
             }
             log.i("Model downloaded")
         }
+
+        recognizer?.close()
+        currentModel = model
+        recognizer = DigitalInkRecognition.getClient(
+            DigitalInkRecognizerOptions.builder(model).build()
+        )
+        currentLanguage = language
     }
 
     /**
@@ -180,7 +185,7 @@ object InboxSyncEngine {
      */
     private suspend fun recognizeStrokes(strokes: List<Stroke>): String {
         val rec = recognizer
-            ?: throw IllegalStateException("ML Kit recognizer not initialized")
+            ?: throw IllegalStateException("ML Kit recognizer not initialized — call ensureRecognizer first")
 
         val lines = segmentIntoLines(strokes)
         log.i("Segmented ${strokes.size} strokes into ${lines.size} lines")
