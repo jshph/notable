@@ -25,6 +25,8 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.Badge
 import androidx.compose.material.BadgedBox
 import androidx.compose.material.Icon
@@ -60,6 +62,7 @@ import com.ethran.notable.navigation.NavigationDestination
 import com.ethran.notable.ui.SnackConf
 import com.ethran.notable.ui.SnackState
 import com.ethran.notable.ui.components.BreadCrumb
+import com.ethran.notable.ui.components.BatchConverterSection
 import com.ethran.notable.ui.components.NotebookCard
 import com.ethran.notable.ui.components.PagePreview
 import com.ethran.notable.ui.components.ShowPagesRow
@@ -70,6 +73,11 @@ import com.ethran.notable.ui.dialogs.PdfImportChoiceDialog
 import com.ethran.notable.ui.noRippleClickable
 import com.ethran.notable.ui.viewmodels.LibraryUiState
 import com.ethran.notable.ui.viewmodels.LibraryViewModel
+import com.ethran.notable.APP_SETTINGS_KEY
+import com.ethran.notable.data.datastore.AppSettings
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import compose.icons.FeatherIcons
 import compose.icons.feathericons.FilePlus
 import compose.icons.feathericons.Folder
@@ -142,112 +150,155 @@ fun LibraryContent(
     onImportPdf: (Uri, Boolean) -> Unit,
     onImportXopp: (Uri) -> Unit
 ) {
-    Column(Modifier.fillMaxSize()) {
-        // Slim header
-        Row(
+    val scrollState = rememberScrollState()
+    val settings = com.ethran.notable.data.datastore.GlobalAppSettings.current
+    
+    Box(modifier = Modifier.fillMaxSize()) {
+        Column(
             Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+                .fillMaxSize()
+                .verticalScroll(scrollState)
+                .padding(bottom = 240.dp)
         ) {
-            Text(
-                text = "Notable",
-                style = androidx.compose.material.MaterialTheme.typography.h5,
-                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
-            )
-            BadgedBox(
-                badge = {
-                    if (!uiState.isLatestVersion) Badge(
-                        backgroundColor = Color.Black,
-                        modifier = Modifier.offset((-12).dp, 10.dp)
-                    )
-                }) {
-                Icon(
-                    imageVector = FeatherIcons.Settings, contentDescription = "Settings",
-                    Modifier
-                        .padding(8.dp)
-                        .noRippleClickable(onClick = onNavigateToSettings)
+            // Slim header
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Notable",
+                    style = androidx.compose.material.MaterialTheme.typography.h5,
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
                 )
-            }
-        }
-
-        // Page grid
-        val pages = uiState.singlePages?.reversed() ?: emptyList()
-        LazyVerticalGrid(
-            columns = GridCells.Adaptive(140.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
-            modifier = Modifier
-                .padding(horizontal = 16.dp)
-                .autoEInkAnimationOnScroll()
-        ) {
-            // New capture card
-            item {
-                Box(
-                    contentAlignment = Alignment.Center,
-                    modifier = Modifier
-                        .aspectRatio(3f / 4f)
-                        .border(2.dp, Color.Black, RectangleShape)
-                        .noRippleClickable(onClick = onCreateNewQuickPage)
-                ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Icon(
-                            imageVector = FeatherIcons.FilePlus,
-                            contentDescription = "New Capture",
-                            tint = Color.Black,
-                            modifier = Modifier.size(48.dp)
+                BadgedBox(
+                    badge = {
+                        if (!uiState.isLatestVersion) Badge(
+                            backgroundColor = Color.Black,
+                            modifier = Modifier.offset((-12).dp, 10.dp)
                         )
-                        Text(
-                            "New Capture",
-                            style = androidx.compose.material.MaterialTheme.typography.body2,
-                            color = Color.DarkGray
-                        )
-                    }
+                    }) {
+                    Icon(
+                        imageVector = FeatherIcons.Settings, contentDescription = "Settings",
+                        Modifier
+                            .padding(8.dp)
+                            .noRippleClickable(onClick = onNavigateToSettings)
+                    )
                 }
             }
 
-            // Existing pages
-            items(pages) { page ->
-                var isPageSelected by remember { mutableStateOf(false) }
-                val isSyncing = page.id in SyncState.syncingPageIds
-                Box {
-                    PagePreview(
-                        modifier = Modifier
-                            .combinedClickable(
-                                onClick = { goToPage(page.id) },
-                                onLongClick = { isPageSelected = true }
-                            )
-                            .aspectRatio(3f / 4f)
-                            .border(1.dp, Color.Gray, RectangleShape),
-                        pageId = page.id
-                    )
-                    if (isSyncing) {
+            // Page grid
+            val pages = uiState.singlePages?.reversed() ?: emptyList()
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+            ) {
+                // Note: Using a fixed height for the grid inside a scrollable Column
+                // Calculate approximate height needed: ceil(items / columns) * itemHeight
+                val itemsPerRow = 2 // Approximate for GridCells.Adaptive(140.dp)
+                val rows = ((pages.size + 1) + itemsPerRow - 1) / itemsPerRow
+                val itemHeight = 140.dp * 4f / 3f // aspectRatio 3/4
+                val gridHeight = itemHeight * rows + 16.dp * (rows - 1)
+
+                LazyVerticalGrid(
+                    columns = GridCells.Adaptive(140.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    modifier = Modifier
+                        .height(gridHeight)
+                        .autoEInkAnimationOnScroll(),
+                    userScrollEnabled = false // Disable grid scrolling, use parent scroll
+                ) {
+                    // New capture card
+                    item {
                         Box(
+                            contentAlignment = Alignment.Center,
                             modifier = Modifier
                                 .aspectRatio(3f / 4f)
-                                .background(Color.White.copy(alpha = 0.7f)),
-                            contentAlignment = Alignment.Center
+                                .border(2.dp, Color.Black, RectangleShape)
+                                .noRippleClickable(onClick = onCreateNewQuickPage)
                         ) {
-                            Text(
-                                "Syncing...",
-                                style = androidx.compose.material.MaterialTheme.typography.caption,
-                                color = Color.DarkGray
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(
+                                    imageVector = FeatherIcons.FilePlus,
+                                    contentDescription = "New Capture",
+                                    tint = Color.Black,
+                                    modifier = Modifier.size(48.dp)
+                                )
+                                Text(
+                                    "New Capture",
+                                    style = androidx.compose.material.MaterialTheme.typography.body2,
+                                    color = Color.DarkGray
+                                )
+                            }
+                        }
+                    }
+
+                    // Existing pages
+                    items(pages) { page ->
+                        var isPageSelected by remember { mutableStateOf(false) }
+                        val isSyncing = page.id in SyncState.syncingPageIds
+                        Box {
+                            PagePreview(
+                                modifier = Modifier
+                                    .combinedClickable(
+                                        onClick = { goToPage(page.id) },
+                                        onLongClick = { isPageSelected = true }
+                                    )
+                                    .aspectRatio(3f / 4f)
+                                    .border(1.dp, Color.Gray, RectangleShape),
+                                pageId = page.id
+                            )
+                            if (isSyncing) {
+                                Box(
+                                    modifier = Modifier
+                                        .aspectRatio(3f / 4f)
+                                        .background(Color.White.copy(alpha = 0.7f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        "Syncing...",
+                                        style = androidx.compose.material.MaterialTheme.typography.caption,
+                                        color = Color.DarkGray
+                                    )
+                                }
+                            }
+                            if (isPageSelected) com.ethran.notable.editor.ui.PageMenu(
+                                appRepository = appRepository,
+                                pageId = page.id,
+                                canDelete = true,
+                                onClose = { isPageSelected = false }
                             )
                         }
                     }
-                    if (isPageSelected) com.ethran.notable.editor.ui.PageMenu(
-                        appRepository = appRepository,
-                        pageId = page.id,
-                        canDelete = true,
-                        onClose = { isPageSelected = false }
+                }
+            }
+            Spacer(modifier = Modifier.height(24.dp))
+        }
+
+        BatchConverterSection(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth(),
+            settings = settings,
+            onSettingsChange = { newSettings ->
+                com.ethran.notable.data.datastore.GlobalAppSettings.update(newSettings)
+                // Persist to database
+                CoroutineScope(Dispatchers.IO).launch {
+                    appRepository.kvProxy.setKv(
+                        APP_SETTINGS_KEY,
+                        newSettings,
+                        AppSettings.serializer()
                     )
                 }
             }
-        }
+        )
     }
 }
 

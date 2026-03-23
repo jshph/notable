@@ -1,53 +1,40 @@
 package com.ethran.notable.io
 
+import android.content.Context
 import android.graphics.RectF
+import android.net.Uri
 import android.os.Environment
+import androidx.documentfile.provider.DocumentFile
+import com.ethran.notable.SCREEN_HEIGHT
+import com.ethran.notable.SCREEN_WIDTH
 import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.db.Annotation
 import com.ethran.notable.data.db.AnnotationType
 import com.ethran.notable.data.db.Stroke
+import com.ethran.notable.data.db.StrokePoint
+import com.ethran.notable.data.datastore.A4_HEIGHT
+import com.ethran.notable.data.datastore.A4_WIDTH
 import com.ethran.notable.data.datastore.GlobalAppSettings
-import com.google.mlkit.common.model.DownloadConditions
-import com.google.mlkit.common.model.RemoteModelManager
-import com.google.mlkit.vision.digitalink.recognition.DigitalInkRecognition
-import com.google.mlkit.vision.digitalink.recognition.DigitalInkRecognitionModel
-import com.google.mlkit.vision.digitalink.recognition.DigitalInkRecognitionModelIdentifier
-import com.google.mlkit.vision.digitalink.recognition.DigitalInkRecognizerOptions
-import com.google.mlkit.vision.digitalink.recognition.Ink
-import com.google.mlkit.vision.digitalink.recognition.RecognitionContext
-import com.google.mlkit.vision.digitalink.recognition.WritingArea
 import io.shipbook.shipbooksdk.ShipBook
-import kotlinx.coroutines.suspendCancellableCoroutine
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import kotlin.coroutines.resume
-import kotlin.coroutines.resumeWithException
 
 private val log = ShipBook.getLogger("InboxSyncEngine")
 
 object InboxSyncEngine {
 
-    private val modelIdentifier =
-        DigitalInkRecognitionModelIdentifier.fromLanguageTag("en-US")
-    private val model =
-        modelIdentifier?.let { DigitalInkRecognitionModel.builder(it).build() }
-    private val recognizer = model?.let {
-        DigitalInkRecognition.getClient(
-            DigitalInkRecognizerOptions.builder(it).build()
-        )
-    }
-
     /**
      * Sync an inbox page to Obsidian. Tags come from the UI (pill selection),
-     * content is recognized from all strokes on the page via ML Kit.
+     * content is recognized from all strokes on the page via Onyx HWR (MyScript).
      * Annotation boxes mark regions to wrap in [[wiki links]] or #tags.
      */
     suspend fun syncInboxPage(
         appRepository: AppRepository,
         pageId: String,
-        tags: List<String>
+        tags: List<String>,
+        context: Context
     ) {
         log.i("Starting inbox sync for page $pageId with tags: $tags")
 
@@ -61,13 +48,18 @@ object InboxSyncEngine {
             return
         }
 
-        ensureModelDownloaded()
+        val serviceReady = try {
+            OnyxHWREngine.bindAndAwait(context)
+        } catch (e: Exception) {
+            log.e("OnyxHWR bind failed: ${e.message}")
+            false
+        }
 
         // 1. Recognize ALL strokes together to preserve natural text flow
-        var fullText = if (allStrokes.isNotEmpty()) {
+        var fullText = if (serviceReady && allStrokes.isNotEmpty()) {
             log.i("Recognizing all ${allStrokes.size} strokes")
-            val raw = recognizeStrokes(allStrokes)
-            postProcessRecognition(raw)
+            val result = recognizeStrokesSafe(allStrokes)
+            postProcessRecognition(result)
         } else ""
 
         log.i("Full recognized text: '${fullText.take(200)}'")
@@ -75,7 +67,7 @@ object InboxSyncEngine {
         // 2. Find annotation text by diffing full recognition vs non-annotation recognition.
         //    Falls back to per-annotation recognition if the diff produces a count mismatch
         //    (which happens when removing strokes changes HWR context enough to alter other words).
-        if (annotations.isNotEmpty()) {
+        if (serviceReady && annotations.isNotEmpty()) {
             val sortedAnnotations = annotations.sortedWith(compareBy({ it.y }, { it.x }))
 
             // Collect stroke IDs that fall inside any annotation box
@@ -96,7 +88,7 @@ object InboxSyncEngine {
             var diffSucceeded = false
             val nonAnnotStrokes = allStrokes.filter { it.id !in annotationStrokeIds }
             if (nonAnnotStrokes.isNotEmpty()) {
-                val baseText = postProcessRecognition(recognizeStrokes(nonAnnotStrokes))
+                val baseText = postProcessRecognition(recognizeStrokesSafe(nonAnnotStrokes))
                 log.i("Base text (without annotations): '${baseText.take(200)}'")
 
                 val annotationTexts = diffWords(baseText, fullText)
@@ -124,10 +116,13 @@ object InboxSyncEngine {
                 for (annotation in sortedAnnotations) {
                     val overlapping = annotationStrokeMap[annotation.id] ?: continue
                     if (overlapping.isEmpty()) continue
-                    val rawAnnotText = recognizeStrokes(overlapping).trim()
+                    val rawAnnotText = recognizeStrokesSafe(overlapping).trim()
                     if (rawAnnotText.isBlank()) continue
                     log.i("Annotation ${annotation.type} (fallback raw): '$rawAnnotText'")
 
+                    // Per-annotation HWR can be noisy — find the best matching
+                    // substring in fullText, trying the full text first, then
+                    // individual words from longest to shortest
                     val matchText = findBestMatch(rawAnnotText, fullText)
                     if (matchText != null) {
                         log.i("Annotation ${annotation.type} (fallback matched): '$matchText'")
@@ -143,154 +138,36 @@ object InboxSyncEngine {
         }
 
         val finalContent = fullText
+        val fileBaseName = SimpleDateFormat("yyyy-MM-dd-HH-mm-ss", Locale.US).format(page.createdAt)
 
-        val createdDate = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(page.createdAt)
-        val markdown = generateMarkdown(createdDate, tags, finalContent)
+        val pdfRelativePath = if (GlobalAppSettings.current.batchConverterPdfMode && allStrokes.isNotEmpty()) {
+            generateAndWriteCapturePdf(
+                context = context,
+                baseName = fileBaseName,
+                strokes = allStrokes,
+                recognizedText = finalContent,
+                hwrReady = serviceReady
+            )
+        } else {
+            null
+        }
 
-        val inboxPath = GlobalAppSettings.current.obsidianInboxPath
-        writeMarkdownFile(markdown, page.createdAt, inboxPath)
+        val markdown = generateMarkdown(context, page.createdAt, tags, finalContent, pdfRelativePath)
+
+        writeMarkdownFile(context, markdown, fileBaseName)
 
         log.i("Inbox sync complete for page $pageId")
-    }
-
-    private suspend fun ensureModelDownloaded() {
-        val m = model ?: throw IllegalStateException("ML Kit model identifier not found")
-        val manager = RemoteModelManager.getInstance()
-
-        val isDownloaded = suspendCancellableCoroutine<Boolean> { cont ->
-            manager.isModelDownloaded(m)
-                .addOnSuccessListener { cont.resume(it) }
-                .addOnFailureListener { cont.resumeWithException(it) }
-        }
-
-        if (!isDownloaded) {
-            log.i("Downloading ML Kit model...")
-            suspendCancellableCoroutine<Void?> { cont ->
-                manager.download(m, DownloadConditions.Builder().build())
-                    .addOnSuccessListener { cont.resume(null) }
-                    .addOnFailureListener { cont.resumeWithException(it) }
-            }
-            log.i("Model downloaded")
-        }
-    }
-
-    /**
-     * Segment strokes into lines based on vertical position, recognize each
-     * line independently with WritingArea and pre-context, then join results.
-     */
-    private suspend fun recognizeStrokes(strokes: List<Stroke>): String {
-        val rec = recognizer
-            ?: throw IllegalStateException("ML Kit recognizer not initialized")
-
-        val lines = segmentIntoLines(strokes)
-        log.i("Segmented ${strokes.size} strokes into ${lines.size} lines")
-
-        val recognizedLines = mutableListOf<String>()
-        var preContext = ""
-
-        for (lineStrokes in lines) {
-            val ink = buildInk(lineStrokes)
-            val writingArea = computeWritingArea(lineStrokes)
-            val context = RecognitionContext.builder()
-                .setPreContext(preContext)
-                .setWritingArea(writingArea)
-                .build()
-
-            val text = suspendCancellableCoroutine<String> { cont ->
-                rec.recognize(ink, context)
-                    .addOnSuccessListener { result ->
-                        cont.resume(result.candidates.firstOrNull()?.text ?: "")
-                    }
-                    .addOnFailureListener { cont.resumeWithException(it) }
-            }
-
-            if (text.isNotBlank()) {
-                recognizedLines.add(text)
-                // Use last ~20 chars as pre-context for the next line
-                preContext = text.takeLast(20)
-            }
-        }
-
-        return recognizedLines.joinToString("\n")
-    }
-
-    /**
-     * Group strokes into horizontal lines by clustering on vertical midpoint.
-     * Strokes whose vertical centers are within half a line-height of each
-     * other belong to the same line.
-     */
-    private fun segmentIntoLines(strokes: List<Stroke>): List<List<Stroke>> {
-        if (strokes.isEmpty()) return emptyList()
-
-        val sorted = strokes.sortedWith(
-            compareBy<Stroke> { (it.top + it.bottom) / 2f }.thenBy { it.left }
-        )
-
-        val strokeHeights = sorted.map { it.bottom - it.top }.filter { it > 0 }.sorted()
-        val medianHeight = if (strokeHeights.isNotEmpty()) {
-            strokeHeights[strokeHeights.size / 2]
-        } else {
-            50f
-        }
-        val lineGapThreshold = medianHeight * 0.75f
-
-        val lines = mutableListOf<MutableList<Stroke>>()
-        var currentLine = mutableListOf(sorted.first())
-        var currentLineCenter = (sorted.first().top + sorted.first().bottom) / 2f
-
-        for (stroke in sorted.drop(1)) {
-            val strokeCenter = (stroke.top + stroke.bottom) / 2f
-            if (strokeCenter - currentLineCenter > lineGapThreshold) {
-                lines.add(currentLine)
-                currentLine = mutableListOf(stroke)
-                currentLineCenter = strokeCenter
-            } else {
-                currentLine.add(stroke)
-                currentLineCenter = currentLine.map { (it.top + it.bottom) / 2f }.average().toFloat()
-            }
-        }
-        lines.add(currentLine)
-
-        return lines.map { line ->
-            line.sortedWith(compareBy<Stroke> { it.createdAt.time }.thenBy { it.left })
-        }
-    }
-
-    private fun buildInk(strokes: List<Stroke>): Ink {
-        val inkBuilder = Ink.builder()
-        for (stroke in strokes) {
-            val strokeBuilder = Ink.Stroke.builder()
-            val baseTime = stroke.createdAt.time
-            for ((i, point) in stroke.points.withIndex()) {
-                val t = if (point.dt != null) {
-                    baseTime + point.dt.toLong()
-                } else {
-                    baseTime + (i * 10L)
-                }
-                strokeBuilder.addPoint(Ink.Point.create(point.x, point.y, t))
-            }
-            inkBuilder.addStroke(strokeBuilder.build())
-        }
-        return inkBuilder.build()
-    }
-
-    private fun computeWritingArea(strokes: List<Stroke>): WritingArea {
-        val minLeft = strokes.minOf { it.left }
-        val maxRight = strokes.maxOf { it.right }
-        val minTop = strokes.minOf { it.top }
-        val maxBottom = strokes.maxOf { it.bottom }
-        val width = (maxRight - minLeft).coerceAtLeast(1f)
-        val height = (maxBottom - minTop).coerceAtLeast(1f)
-        return WritingArea(width, height)
     }
 
     /**
      * Find the best matching substring of [annotText] within [fullText].
      * Tries the full recognized text first, then individual words (longest first).
+     * Returns the matching substring as it appears in fullText, or null.
      */
     private fun findBestMatch(annotText: String, fullText: String): String? {
         if (fullText.contains(annotText)) return annotText
 
+        // Try individual words, longest first (longer words are more specific)
         val words = annotText.split(Regex("\\s+")).filter { it.isNotBlank() }
         val sorted = words.sortedByDescending { it.length }
         for (word in sorted) {
@@ -307,14 +184,34 @@ object InboxSyncEngine {
         }
     }
 
+    private suspend fun recognizeStrokesSafe(strokes: List<Stroke>): String {
+        return try {
+            val language = GlobalAppSettings.current.recognitionLanguage
+            OnyxHWREngine.recognizeStrokes(
+                strokes, 
+                viewWidth = 1404f, 
+                viewHeight = 1872f,
+                language = language
+            ) ?: ""
+        } catch (e: Exception) {
+            log.e("OnyxHWR failed: ${e.message}")
+            ""
+        }
+    }
+
     /**
      * Find contiguous word segments in [fullText] that are absent from [baseText].
-     * Uses a simple word-level LCS diff.
+     * Uses a simple word-level LCS diff. Returns segments in the order they appear
+     * in fullText, with consecutive inserted words joined by spaces.
+     *
+     * Example: baseText="This is a document", fullText="This is a new document pkm"
+     *   → ["new", "pkm"]
      */
     private fun diffWords(baseText: String, fullText: String): List<String> {
         val baseWords = baseText.split(Regex("\\s+")).filter { it.isNotBlank() }
         val fullWords = fullText.split(Regex("\\s+")).filter { it.isNotBlank() }
 
+        // LCS to find which words in fullText are "matched" to baseText
         val m = baseWords.size
         val n = fullWords.size
         val dp = Array(m + 1) { IntArray(n + 1) }
@@ -328,6 +225,7 @@ object InboxSyncEngine {
             }
         }
 
+        // Backtrack to find which fullText words are NOT in the LCS (= annotation words)
         val matched = BooleanArray(n)
         var i = m; var j = n
         while (i > 0 && j > 0) {
@@ -341,6 +239,7 @@ object InboxSyncEngine {
             }
         }
 
+        // Group consecutive unmatched words into segments
         val segments = mutableListOf<String>()
         var current = mutableListOf<String>()
         for (k in fullWords.indices) {
@@ -363,6 +262,7 @@ object InboxSyncEngine {
         }
     }
 
+
     /**
      * Post-process recognition output:
      * - Normalize any bracket/paren wrapping to [[wiki links]]
@@ -371,10 +271,12 @@ object InboxSyncEngine {
     private fun postProcessRecognition(text: String): String {
         var result = text
 
+        // Normalize bracket/paren wrapping to [[wiki links]]
         result = result.replace(Regex("""[(\[]{1,2}([^)\]\n]+?)[)\]]{1,2}""")) { match ->
             "[[${match.groupValues[1].trim()}]]"
         }
 
+        // Collapse space between # and the word following it
         result = result.replace(Regex("""#\s+(\w+)""")) { match ->
             "#${match.groupValues[1]}"
         }
@@ -383,36 +285,224 @@ object InboxSyncEngine {
     }
 
     private fun generateMarkdown(
-        createdDate: String,
+        context: Context,
+        createdAt: Date,
         tags: List<String>,
-        content: String
+        content: String,
+        pdfPath: String? = null
     ): String {
-        val sb = StringBuilder()
-        sb.appendLine("---")
-        sb.appendLine("created: \"[[$createdDate]]\"")
-        if (tags.isNotEmpty()) {
-            sb.appendLine("tags:")
-            tags.forEach { sb.appendLine("  - $it") }
+        val now = Date()
+        val isoFormatter = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US)
+        val dateFormatter = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+        val titleDate = dateFormatter.format(createdAt)
+
+        val title = "Inbox Capture $titleDate"
+        val templateUri = GlobalAppSettings.current.obsidianTemplateUri
+
+        return ObsidianTemplateEngine.renderMarkdown(
+            context = context,
+            templateUriString = templateUri,
+            title = title,
+            created = createdAt,
+            modified = now,
+            content = content,
+            pdfPath = pdfPath
+        ) {
+            buildString {
+                appendLine("---")
+                appendLine("title: $title")
+                appendLine("created: ${isoFormatter.format(createdAt)}")
+                appendLine("modified: ${isoFormatter.format(now)}")
+                appendLine("tags:")
+                tags.forEach { appendLine("  - $it") }
+                if (tags.isEmpty()) {
+                    appendLine("  - status/todo")
+                }
+                appendLine("source: notable")
+                appendLine("---")
+                appendLine()
+                appendLine("# $title")
+                appendLine()
+                if (pdfPath != null) {
+                    appendLine("![]($pdfPath)")
+                    appendLine()
+                }
+                appendLine(content.trim())
+            }
         }
-        sb.appendLine("---")
-        sb.appendLine()
-        sb.appendLine(content.trim())
-        return sb.toString()
     }
 
-    private fun writeMarkdownFile(markdown: String, createdAt: Date, inboxPath: String) {
-        val timestamp = SimpleDateFormat("yyyy-MM-dd-HH-mm-ss", Locale.US).format(createdAt)
-        val fileName = "$timestamp.md"
+    private fun writeMarkdownFile(context: Context, markdown: String, baseName: String) {
+        val fileName = "$baseName.md"
 
-        val dir = if (inboxPath.startsWith("/")) {
-            File(inboxPath)
+        val settings = GlobalAppSettings.current
+        val outputUri = settings.obsidianOutputUri
+
+        if (outputUri.isNotEmpty()) {
+            // Use SAF (supports external SD cards)
+            try {
+                val uri = Uri.parse(outputUri)
+                val outputDir = DocumentFile.fromTreeUri(context, uri)
+                if (outputDir == null || !outputDir.exists()) {
+                    log.e("Output directory not accessible: $outputUri")
+                    return
+                }
+
+                val file = outputDir.createFile("text/markdown", fileName)
+                if (file == null) {
+                    log.e("Failed to create file: $fileName")
+                    return
+                }
+
+                context.contentResolver.openOutputStream(file.uri)?.use { outputStream ->
+                    outputStream.write(markdown.toByteArray())
+                }
+                log.i("Written inbox note to ${file.uri}")
+            } catch (e: Exception) {
+                log.e("Failed to write markdown file via SAF: ${e.message}")
+            }
         } else {
-            File(Environment.getExternalStorageDirectory(), inboxPath)
-        }
+            // Fallback to legacy text path
+            val inboxPath = settings.obsidianInboxPath
+            val dir = if (inboxPath.startsWith("/")) {
+                File(inboxPath)
+            } else {
+                File(Environment.getExternalStorageDirectory(), inboxPath)
+            }
 
-        dir.mkdirs()
-        val file = File(dir, fileName)
-        file.writeText(markdown)
-        log.i("Written inbox note to ${file.absolutePath}")
+            dir.mkdirs()
+            val file = File(dir, fileName)
+            file.writeText(markdown)
+            log.i("Written inbox note to ${file.absolutePath} (legacy path)")
+        }
+    }
+
+    private suspend fun generateAndWriteCapturePdf(
+        context: Context,
+        baseName: String,
+        strokes: List<Stroke>,
+        recognizedText: String,
+        hwrReady: Boolean
+    ): String? {
+        val pdfFileName = "$baseName.pdf"
+        val tempPdf = File(context.cacheDir, pdfFileName)
+        val defaultWidth = 1404f
+        val defaultHeight = 1872f
+        val padding = 32f
+
+        val maxRight = strokes.maxOfOrNull { it.right } ?: defaultWidth
+        val maxBottom = strokes.maxOfOrNull { it.bottom } ?: defaultHeight
+        val contentWidth = maxOf(defaultWidth, maxRight + padding)
+        val contentBottom = maxOf(defaultHeight, maxBottom + padding)
+
+        return try {
+            val paginate = GlobalAppSettings.current.paginatePdf
+            val pdfPages = if (paginate) {
+                // Match capture-screen pagination (same logic as drawPaginationLine / PDF export ratio).
+                val logicalScreenWidth = kotlin.math.min(SCREEN_HEIGHT, SCREEN_WIDTH).toFloat().coerceAtLeast(1f)
+                val sourcePageHeight = logicalScreenWidth * (A4_HEIGHT.toFloat() / A4_WIDTH.toFloat())
+                val pageCount = kotlin.math.ceil(contentBottom / sourcePageHeight).toInt().coerceAtLeast(1)
+
+                (0 until pageCount).map { pageIndex ->
+                    val pageTop = pageIndex * sourcePageHeight
+                    val pageBottom = pageTop + sourcePageHeight
+                    val pageStrokes = strokes
+                        .filter { it.bottom > pageTop && it.top < pageBottom }
+                        .map { stroke ->
+                            val shiftedPoints = stroke.points.map { point ->
+                                StrokePoint(
+                                    x = point.x,
+                                    y = point.y - pageTop,
+                                    pressure = point.pressure,
+                                    tiltX = point.tiltX,
+                                    tiltY = point.tiltY,
+                                    dt = point.dt
+                                )
+                            }
+                            stroke.copy(
+                                top = stroke.top - pageTop,
+                                bottom = stroke.bottom - pageTop,
+                                points = shiftedPoints
+                            )
+                        }
+
+                    val pageText = if (hwrReady && pageStrokes.isNotEmpty()) {
+                        postProcessRecognition(recognizeStrokesSafe(pageStrokes))
+                    } else {
+                        ""
+                    }
+
+                    SearchablePdfGenerator.PdfPageContent(
+                        strokes = pageStrokes,
+                        recognizedText = pageText,
+                        pageWidth = contentWidth,
+                        pageHeight = sourcePageHeight
+                    )
+                }
+            } else {
+                listOf(
+                    SearchablePdfGenerator.PdfPageContent(
+                        strokes = strokes,
+                        recognizedText = recognizedText,
+                        pageWidth = contentWidth,
+                        pageHeight = contentBottom
+                    )
+                )
+            }
+
+            val pdfResult = SearchablePdfGenerator.generateSearchablePdfForPages(
+                pages = pdfPages,
+                outputFile = tempPdf,
+                outputPageWidth = SearchablePdfGenerator.A5_PAGE_WIDTH,
+                outputPageHeight = SearchablePdfGenerator.A5_PAGE_HEIGHT
+            )
+
+            if (!pdfResult.success || pdfResult.pdfFile == null) {
+                log.w("Capture PDF generation failed: ${pdfResult.errorMessage}")
+                return null
+            }
+
+            val settings = GlobalAppSettings.current
+            val targetPdfTreeUri = settings.batchConverterPdfUri.ifBlank { settings.obsidianOutputUri }
+
+            if (targetPdfTreeUri.isNotBlank()) {
+                val outputDir = DocumentFile.fromTreeUri(context, Uri.parse(targetPdfTreeUri))
+                if (outputDir == null || !outputDir.exists()) {
+                    log.e("Capture PDF output directory not accessible: $targetPdfTreeUri")
+                    return null
+                }
+
+                val file = outputDir.createFile("application/pdf", pdfFileName)
+                if (file == null) {
+                    log.e("Failed to create capture PDF file: $pdfFileName")
+                    return null
+                }
+
+                context.contentResolver.openOutputStream(file.uri, "w")?.use { outputStream ->
+                    tempPdf.inputStream().use { inputStream ->
+                        inputStream.copyTo(outputStream)
+                    }
+                }
+                log.i("Written capture PDF to ${file.uri}")
+                pdfFileName
+            } else {
+                val inboxPath = settings.obsidianInboxPath
+                val dir = if (inboxPath.startsWith("/")) {
+                    File(inboxPath)
+                } else {
+                    File(Environment.getExternalStorageDirectory(), inboxPath)
+                }
+                dir.mkdirs()
+                val file = File(dir, pdfFileName)
+                tempPdf.copyTo(file, overwrite = true)
+                log.i("Written capture PDF to ${file.absolutePath} (legacy path)")
+                pdfFileName
+            }
+        } catch (e: Exception) {
+            log.e("Failed to generate/write capture PDF: ${e.message}")
+            null
+        } finally {
+            if (tempPdf.exists()) tempPdf.delete()
+        }
     }
 }

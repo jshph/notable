@@ -8,6 +8,7 @@
     <string name="settings_title">Settings</string>
     <string name="settings_tab_general_name">General</string>
     <string name="settings_tab_gestures_name">Gestures</string>
+    <string name="settings_tab_obsidian_name">Obsidian</string>
     <string name="settings_tab_debug_name" translatable="false">Debug</string>
     <string name="default_page_background_template">Default Page Background Template</string>
     <string name="blank_page">Blank page</string>
@@ -19,6 +20,15 @@
     <string name="enable_scribble_to_erase">Enable scribble-to-erase (scribble out your mistakes to erase them)</string>
     <string name="enable_smooth_scrolling">Enable smooth scrolling</string>
     <string name="continuous_zoom">Continuous Zoom</string>
+    <string name="recognition_language">Handwriting Recognition Language</string>
+    <string name="lang_cs_cz">Czech</string>
+    <string name="lang_en_us">English (US)</string>
+    <string name="lang_de_de">German</string>
+    <string name="lang_fr_fr">French</string>
+    <string name="lang_es_es">Spanish</string>
+    <string name="lang_it_it">Italian</string>
+    <string name="lang_pl_pl">Polish</string>
+    <string name="lang_ru_ru">Russian</string>
     <string name="continuous_stroke_slider">Continuous Stroke Slider</string>
     <string name="monochrome_mode">Monochrome mode</string>
     <string name="paginate_pdf">Paginate PDF</string>

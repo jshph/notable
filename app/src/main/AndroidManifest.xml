@@ -40,6 +40,13 @@
             </intent-filter>
         </activity>
 
+        <activity
+            android:name=".noteconverter.NoteConverterActivity"
+            android:exported="true"
+            android:theme="@style/Theme.Inka"
+            android:label="Note Converter" />
+
+
         <provider
             android:name="com.ethran.notable.editor.utils.Provider"
             android:authorities="com.ethran.notable.provider"

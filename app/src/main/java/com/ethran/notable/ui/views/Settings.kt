@@ -62,6 +62,7 @@ import com.ethran.notable.ui.SnackState
 import com.ethran.notable.ui.components.DebugSettings
 import com.ethran.notable.ui.components.GeneralSettings
 import com.ethran.notable.ui.components.GesturesSettings
+import com.ethran.notable.ui.components.ObsidianSettings
 import com.ethran.notable.ui.theme.InkaTheme
 import com.ethran.notable.ui.viewmodels.GestureRowModel
 import com.ethran.notable.ui.viewmodels.SettingsViewModel
@@ -126,6 +127,7 @@ fun SettingsContent(
     val tabs = listOf(
         stringResource(R.string.settings_tab_general_name),
         stringResource(R.string.settings_tab_gestures_name),
+        stringResource(R.string.settings_tab_obsidian_name),
         stringResource(R.string.settings_tab_debug_name)
     )
 
@@ -155,7 +157,9 @@ fun SettingsContent(
                         settings, onUpdateSettings, listOfGestures, availableGestures
                     )
 
-                    2 -> DebugSettings(settings, onUpdateSettings, goToWelcome, goToSystemInfo)
+                    2 -> ObsidianSettings(settings, onUpdateSettings)
+
+                    3 -> DebugSettings(settings, onUpdateSettings, goToWelcome, goToSystemInfo)
                 }
             }
 
@@ -379,7 +383,7 @@ fun SettingsPreviewDebug() {
             goToSystemInfo = {},
             onCheckUpdate = {},
             onUpdateSettings = {},
-            selectedTabInitial = 2
+            selectedTabInitial = 3
         )
     }
 }
