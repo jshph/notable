@@ -180,59 +180,195 @@ class MainActivity : ComponentActivity() {
 }
 ```
 
-## File Format Details
+## Native .note Format Specification
 
-### .note Archive Structure
+### Container Format
 
-```
-Notebook-1.note (ZIP)
-├── a8e4ea1f6f6848cd99ccf081d108bbaa/
-│   ├── note/pb/note_info          # Protobuf: document metadata, pen settings
-│   ├── shape/
-│   │   └── *.zip                  # Stroke metadata (bounding boxes)
-│   ├── point/
-│   │   └── *#points               # Binary point data (coordinates)
-│   ├── template/json/
-│   │   └── *.template_json        # Page template (background)
-│   └── virtual/
-│       ├── doc/pb/*               # Document structure
-│       └── page/pb/*              # Page info
-```
-
-### Points File Format (Binary)
+The `.note` file is a **ZIP archive** containing metadata, shape information, and point data:
 
 ```
-[Container]
-    - Header/prefix (format-dependent)
-    - Point chunk payloads
-    - Tail chunk index table
-    - Last 4 bytes: big-endian offset to chunk index table start
-
-[Tail Chunk Index Table]
-    - Repeated entries (44 bytes each):
-        - Stroke UUID (36 bytes ASCII)
-        - Chunk offset (4 bytes, big-endian uint32)
-        - Chunk size (4 bytes, big-endian uint32)
-
-[Chunk Payload]
-    - Chunk header (4 bytes)
-    - Repeating point records (16 bytes each):
-        - X coordinate (4 bytes, big-endian float32)
-        - Y coordinate (4 bytes, big-endian float32)
-        - Timestamp delta (2 bytes, big-endian uint16)
-        - Pressure (2 bytes, big-endian uint16, 0-4095 range)
-        - Sequence/index (4 bytes, big-endian uint32)
+note-file.note (ZIP archive)
+├── note/pb/note_info              # Protobuf with embedded JSON document metadata
+├── shape/[page-id]#[timestamp].zip  # Nested ZIP with stroke metadata (bounding boxes)
+├── point/[page-id]/#points          # Binary point data for all strokes
+└── [stash/...]                    # Historical/deleted content (ignored by parser)
 ```
 
-### Parser Strategy (Current)
+### Metadata Section (note_info)
 
-- Primary path (modern format):
-    - Read table start offset from last 4 bytes.
-    - Parse UUID/offset/size entries from tail table.
-    - Decode points from each chunk using 16-byte records.
-    - Match chunk stroke UUIDs to shape metadata IDs.
-- Fallback path (legacy/unknown variants):
-    - Use legacy flat parser to avoid hard failure on older files.
+The `note/pb/note_info` file is a Protobuf message containing embedded JSON strings:
+
+```json
+{
+  "title": "Note Title",
+  "pageInfo": {
+    "width": 1860.0,
+    "height": 2480.0
+  }
+}
+```
+
+**Fields:**
+- `title` (string): Document/note name
+- `pageInfo.width` (double): Page width in pixels (default: 1860)
+- `pageInfo.height` (double): Page height in pixels (default: 2480)
+
+### Shape Metadata Section (stroke metadata)
+
+Located in `shape/[page-id]#[timestamp].zip`, this nested ZIP contains protobuf with stroke metadata extracted via JSON pattern matching:
+
+**UUID patterns (36-byte ASCII strings):**
+```
+[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}
+```
+
+Each stroke is identified by two UUIDs:
+1. **strokeId**: Unique identifier for the stroke
+2. **pointsId**: Reference to point data in the point file
+
+**Bounding box format (JSON objects):**
+```json
+{
+  "bottom": 1234.5,
+  "empty": false,
+  "left": 100.0,
+  "right": 500.0,
+  "stability": 1,
+  "top": 200.0
+}
+```
+
+### Point Data Section (stroke points) — Binary Format
+
+Located in `point/[page-id]/#points`. Uses a **chunk-based table lookup system**:
+
+#### File Layout
+
+```
+[0 bytes to tableOffset)
+    Stroke data chunks (variable size)
+    
+[tableOffset to EOF-4)
+    Point chunk entry table
+    - Repeated entries: 44 bytes each
+      - Bytes 0-35: Stroke ID (36-char ASCII UUID)
+      - Bytes 36-39: Chunk offset (big-endian int32)
+      - Bytes 40-43: Chunk size (big-endian int32)
+    
+[EOF-4 to EOF)
+    Table start offset (big-endian int32)
+```
+
+#### Chunk Structure
+
+Each data chunk contains:
+```
+[0-3]:    4-byte header (purpose unknown)
+[4+):     Point records (repeated)
+```
+
+#### Point Record Format
+
+Each point is **16 bytes, big-endian**:
+
+```
+[0-3]:    x coordinate (float32)
+[4-7]:    y coordinate (float32)
+[8-9]:    dt - delta time in milliseconds (uint16)
+[10-11]:  pressure - raw value 0-4095 (uint16)
+[12-15]:  sequence number (uint32, unused)
+```
+
+**Total records:** `(chunk_size - 4) / 16`
+
+#### Legacy Format (Fallback)
+
+For older files where chunk parsing fails:
+
+```
+[0-87]:     Header/metadata (skipped)
+[88+):      Point records
+    [0-3]:  x (float32, big-endian)
+    [4-7]:  y (float32, big-endian)
+    [8-10]: 3-byte timestamp delta (big-endian)
+    [11-12]:pressure (int16, big-endian, divide by 4095 for 0-1 range)
+    [13-16]:sequence (int32, unused)
+```
+
+### Parser Strategy
+
+**Primary path (modern format):**
+1. Read table start offset from last 4 bytes (big-endian int32)
+2. Validate offset range
+3. Parse UUID/offset/size entries (44 bytes each) from tail table
+4. Extract each chunk using offset and size
+5. Decode point records (16 bytes each) from chunks
+6. Match chunk stroke UUIDs to shape metadata IDs
+
+**Fallback path (legacy/unknown variants):**
+- Use legacy flat parser to avoid hard failure on older files
+- Triggered if modern parser returns no chunks
+
+### Data Type Specifications
+
+#### StrokePoint (Internal representation)
+```kotlin
+data class StrokePoint(
+    val x: Float,                    // Absolute x coordinate in pixels
+    val y: Float,                    // Absolute y coordinate in pixels
+    val pressure: Float? = null,     // Normalized 0-1 (pressureRaw / 4095)
+    val tiltX: Int? = null,          // Tilt in degrees (-90 to 90, not in .note format)
+    val tiltY: Int? = null,          
+    val dt: UShort? = null           // Delta time in milliseconds since first point
+)
+```
+
+#### Stroke (Internal representation)
+```kotlin
+data class Stroke(
+    val id: String,                  // UUID from metadata
+    val size: Float,                 // Pen width in pixels (default: 4.72)
+    val pen: Pen,                    // Pen type (default: BALLPEN)
+    val color: Int,                  // ARGB color (default: black, 0xFF000000)
+    val maxPressure: Int,            // Pressure range max (default: 4095)
+    val top: Float,                  // Bounding box top
+    val bottom: Float,               // Bounding box bottom
+    val left: Float,                 // Bounding box left
+    val right: Float,                // Bounding box right
+    val points: List<StrokePoint>,   // All coordinate and pressure points
+    val pageId: String,              // Reference to containing page
+    val createdAt: Date              // Import timestamp
+)
+```
+
+### Byte Order & Encoding
+
+- **Point data**: Big-endian (network byte order)
+- **Timestamps**: Unix milliseconds
+- **Coordinates**: Pixel units
+- **Pressure**: Raw 0-4095 scale (divide by 4095 for normalized 0-1)
+- **String encoding**: ASCII (UUIDs in tables), UTF-8 (metadata in protobuf)
+
+### Default Values
+
+| Parameter | Value | Notes |
+|-----------|-------|-------|
+| DPI | 320 | pixels per inch on standard Boox devices |
+| Pen width | 4.7244096 | pixels (ballpoint pen) |
+| Color | Black (0xFF000000) | ARGB format |
+| Max pressure | 4095 | Physical stylus range |
+| Page width | 1860 px | ≈ 5.8 inches at 320 DPI |
+| Page height | 2480 px | ≈ 7.75 inches at 320 DPI |
+| Pen type | BALLPEN | All strokes default to ballpoint |
+
+### Known Limitations
+
+1. **No tilt data**: Native format doesn't store pen tilt (always null in StrokePoint)
+2. **Single pen type**: All strokes imported as ballpoint; original pen type not preserved
+3. **No layer support**: Strokes flattened to single page
+4. **Monochrome**: All strokes imported as black; color info not in point data
+5. **Pressure normalization**: Raw values assumed 0-4095; may vary by device
+6. **Legacy format complexity**: Older files require fallback binary parser
 
 ## Requirements
 
