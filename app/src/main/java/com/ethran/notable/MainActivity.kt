@@ -111,8 +111,10 @@ class MainActivity : ComponentActivity() {
                         editorSettingCacheManager.get().init()
                         strokeMigrationHelper.get().reencodeStrokePointsToSB1()
 
-                        // Pre-populate inbox tag cache
-                        VaultTagScanner.refreshCache(savedSettings.obsidianInboxPath)
+                        // Pre-populate inbox tag cache (only works with legacy text paths, not SAF URIs)
+                        if (savedSettings.obsidianOutputUri.isEmpty() && savedSettings.obsidianInboxPath.isNotEmpty()) {
+                            VaultTagScanner.refreshCache(savedSettings.obsidianInboxPath)
+                        }
                     }
                 }
                 isInitialized = true

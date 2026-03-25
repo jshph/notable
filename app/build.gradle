@@ -1,6 +1,6 @@
 plugins {
     id 'com.android.application'
-    id 'org.jetbrains.kotlin.android'
+    // Kotlin Android plugin removed - no longer required in AGP 9.0 (Kotlin is built-in)
     id 'com.google.devtools.ksp'
     id 'kotlin-parcelize'
     id 'com.google.gms.google-services'
@@ -30,9 +30,6 @@ android {
         }
         ksp {
             arg('room.schemaLocation', "$projectDir/schemas")
-        }
-        ndk {
-            abiFilters 'arm64-v8a'
         }
         javaCompileOptions {
             annotationProcessorOptions {
@@ -86,8 +83,7 @@ android {
             }
         }
         release {
-            minifyEnabled true
-            shrinkResources true
+            minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
             buildConfigField("boolean", "IS_NEXT", IS_NEXT)
             buildConfigField "String", "SHIPBOOK_APP_ID", "\"${System.getenv("SHIPBOOK_APP_ID") ?: "default-secret"}\""
@@ -101,12 +97,12 @@ android {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
     }
-    kotlinOptions {
-        jvmTarget = '17'
-    }
+    // kotlinOptions removed - use compileOptions instead with AGP 9.0 built-in Kotlin
+    // The JVM target is already configured in compileOptions above
     buildFeatures {
         compose true
         buildConfig true
+        aidl true
     }
     composeOptions {
         kotlinCompilerExtensionVersion compose_version
@@ -127,7 +123,7 @@ android {
 }
 
 dependencies {
-    implementation 'androidx.core:core-ktx:1.15.0'
+    implementation 'androidx.core:core-ktx:1.17.0'
     implementation "androidx.compose.ui:ui:$compose_version"
     implementation "androidx.compose.material:material:$compose_version"
     implementation "androidx.compose.ui:ui-tooling-preview:$compose_version"
@@ -137,6 +133,10 @@ dependencies {
     implementation 'androidx.fragment:fragment-ktx:1.8.9'
     implementation 'androidx.graphics:graphics-core:1.0.4'
     implementation 'androidx.input:input-motionprediction:1.0.0'
+    
+    // DataStore for Note Converter settings
+    implementation 'androidx.datastore:datastore-preferences:1.1.1'
+    implementation 'androidx.documentfile:documentfile:1.1.0'
 
     //implementation fileTree(dir: 'libs', include: ['*.aar'])
     implementation('com.onyx.android.sdk:onyxsdk-device:1.3.2') {
@@ -206,8 +206,13 @@ dependencies {
     // for PDF support:
     implementation("com.artifex.mupdf:fitz:1.26.10")
 
-    // ML Kit Digital Ink Recognition
-    implementation 'com.google.mlkit:digital-ink-recognition:19.0.0'
+    // Jetpack Ink API — stroke rendering + geometry
+    def ink_version = "1.0.0"
+    implementation "androidx.ink:ink-nativeloader:$ink_version"
+    implementation "androidx.ink:ink-brush:$ink_version"
+    implementation "androidx.ink:ink-geometry:$ink_version"
+    implementation "androidx.ink:ink-rendering:$ink_version"
+    implementation "androidx.ink:ink-strokes:$ink_version"
 
     // Hilt
     implementation "com.google.dagger:hilt-android:2.59.2"

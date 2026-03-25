@@ -49,8 +49,19 @@ data class AppSettings(
     val enableQuickNav: Boolean = true,
 
 
-    // Inbox Capture
-    val obsidianInboxPath: String = "Documents/primary/inbox",
+    // Handwriting Recognition
+    val recognitionLanguage: String = "cs_CZ",
+
+    // Inbox Capture & Batch Converter - shared output directory
+    val obsidianInboxPath: String = "Documents/primary/inbox", // Legacy text path
+    val obsidianOutputUri: String = "", // SAF URI for unified output (both features use this)
+    val obsidianTemplateUri: String = "", // Optional markdown template file (SAF URI)
+    
+    // Batch Converter
+    val batchConverterInputUri: String = "",
+    val batchConverterLastScan: Long = 0,
+    val batchConverterPdfMode: Boolean = false,
+    val batchConverterPdfUri: String = "",
 
     // Debug
     val showWelcome: Boolean = true,

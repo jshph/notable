@@ -9,7 +9,7 @@ Write with a pen. Tag with your vault's vocabulary. Sync as markdown.
 
 [![Kotlin](https://img.shields.io/badge/Kotlin-2.3-7F52FF?logo=kotlin&logoColor=white)](https://kotlinlang.org)
 [![Jetpack Compose](https://img.shields.io/badge/Jetpack_Compose-Material-4285F4?logo=jetpackcompose&logoColor=white)](https://developer.android.com/jetpack/compose)
-[![License: GPL-3.0](https://img.shields.io/badge/License-GPL--3.0-blue.svg)](./LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 
 </div>
 
@@ -155,4 +155,4 @@ Local-first meeting memos with timestamp-synced transcription. Record a conversa
 
 ## License
 
-[GPL-3.0](./LICENSE)
+[MIT](./LICENSE)
